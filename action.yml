@@ -123,7 +123,7 @@ runs:
           local BUCKET_NAME="edenlabllc-${TENANT_NAME}-artifacts-infra"
           
           tar --exclude=**.git/ --exclude-from "${DIST_EXCLUDE_FILES}" \
-          -zcf "${DIST_ARCHIVE_DIR}/${TENANT_NAME}-${TARBALL_VERSION}".tar.gz $(get_include_path) \
+          -zcvf "${DIST_ARCHIVE_DIR}/${TENANT_NAME}-${TARBALL_VERSION}".tar.gz $(get_include_path) \
           -C "${DIST_TMP_DIR}"/ .
           echo ">INFO: create tarball with version ${TARBALL_VERSION} by path ${DIST_ARCHIVE_DIR}."
           echo ">INFO: start upload on s3 bucket: ${BUCKET_NAME}"
