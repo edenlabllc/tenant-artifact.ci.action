@@ -70,7 +70,7 @@ runs:
         readonly DIST_DIR="dist"
         readonly DIST_TMP_DIR="${DIST_DIR}/tmp"
         readonly DIST_ARCHIVE_DIR="${DIST_DIR}/archive"
-        readonly DIST_EXCLUDE_FILES="${DIST_TMP_DIR}/exclude_files"
+        readonly DIST_EXCLUDE_FILES="${DIST_DIR}/exclude_files"
         
         echo
         echo "Install RMK."
@@ -122,7 +122,9 @@ runs:
           local TENANT_NAME="$(rmk config view | tail +2 | yq '.tenant')"
           local BUCKET_NAME="edenlabllc-${TENANT_NAME}-artifacts-infra"
           
-          tar --exclude-from "${DIST_EXCLUDE_FILES}" -zcf "${DIST_ARCHIVE_DIR}/${TENANT_NAME}-${TARBALL_VERSION}".tar.gz $(get_include_path) -C "${DIST_TMP_DIR}"/ .
+          tar --exclude '**.git/' --exclude-from "${DIST_EXCLUDE_FILES}" \
+          -zcf "${DIST_ARCHIVE_DIR}/${TENANT_NAME}-${TARBALL_VERSION}".tar.gz $(get_include_path) \
+          -C "${DIST_TMP_DIR}"/ .
           echo ">INFO: create tarball with version ${TARBALL_VERSION} by path ${DIST_ARCHIVE_DIR}."
           echo ">INFO: start upload on s3 bucket: ${BUCKET_NAME}"
           aws s3 sync "${DIST_ARCHIVE_DIR}" s3://"${BUCKET_NAME}"/"${TARBALL_VERSION}" --delete
