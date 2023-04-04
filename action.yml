@@ -58,14 +58,14 @@ runs:
     - run: |
         set -e
         
-        readonly GITHUB_TOKEN='${{ inputs.github_token_repo_full_access }}'
-        readonly AWS_REGION='${{ inputs.core_aws_region }}'
-        readonly AWS_ACCESS_KEY_ID='${{ inputs.core_aws_access_key_id }}'
-        readonly AWS_SECRET_ACCESS_KEY='${{ inputs.core_aws_secret_key }}'
+        export GITHUB_TOKEN='${{ inputs.github_token_repo_full_access }}'
+        export AWS_REGION='${{ inputs.core_aws_region }}'
+        export AWS_ACCESS_KEY_ID='${{ inputs.core_aws_access_key_id }}'
+        export AWS_SECRET_ACCESS_KEY='${{ inputs.core_aws_secret_key }}'
+        export RMK_RELEASE_SKIP_CONTEXT_SWITCH='${{ inputs.rmk_release_skip_context_switch }}'
+        export SKIP_GENERATE_CERTS_LINKERD='${{ inputs.skip_generate_certs_linkerd }}'
         readonly TARBALL_VERSION='${{ inputs.tarball_version }}'
         readonly RMK_VERSION='${{ inputs.rmk_version }}'
-        readonly RMK_RELEASE_SKIP_CONTEXT_SWITCH='${{ inputs.rmk_release_skip_context_switch }}'
-        readonly SKIP_GENERATE_CERTS_LINKERD='${{ inputs.skip_generate_certs_linkerd }}'
         readonly INCLUDE_PATHS='${{ inputs.include_paths }}'
         readonly DIST_DIR="dist"
         readonly DIST_TMP_DIR="${DIST_DIR}/tmp"
