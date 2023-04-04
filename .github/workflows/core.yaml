@@ -34,28 +34,6 @@ jobs:
         with:
           ref: ${{ github.ref }}
 
-#      - name: Configure AWS credentials
-#        uses: aws-actions/configure-aws-credentials@v1
-#        with:
-#          aws-region: ${{ env.CORE_AWS_REGION }}
-#          aws-access-key-id: ${{ secrets.CORE_AWS_ACCESS_KEY_ID }}
-#          aws-secret-access-key: ${{ secrets.CORE_AWS_SECRET_ACCESS_KEY }}
-#
-#      - name: Login to AWS ECR
-#        uses: aws-actions/amazon-ecr-login@v1
-#
-#      - name: Build and push image to AWS ECR
-#        uses: docker/build-push-action@v2
-#        with:
-#          context: .
-#          push: true
-#          tags: ${{ secrets.CORE_AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.CORE_AWS_REGION }}.amazonaws.com/${{ env.REPOSITORY_NAME }}:${{ env.VERSION }}
-#
-#      - name: Scan image for vulnerabilities
-#        run: |
-#          # argument DELETE_IMAGE is false to keep "${VERSION}-develop" image tag in ECR for development purposes
-#          ./scan-image.sh ${{ env.REPOSITORY_NAME }} ${{ env.VERSION }} ${{ env.GIT_BRANCH }} false false
-
       - name: Release service
         run: |
           ./release-service.sh ${{ env.VERSION }} ${{ env.GIT_BRANCH }} ${{ env.GITHUB_SHA }} ""
