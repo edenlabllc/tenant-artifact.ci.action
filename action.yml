@@ -122,7 +122,7 @@ runs:
           local TENANT_NAME="$(rmk config view | tail +2 | yq '.tenant')"
           local BUCKET_NAME="edenlabllc-${TENANT_NAME}-artifacts-infra"
           tar --version 
-          tar --exclude-vcs --exclude-vcs-ignores --exclude-from "${DIST_EXCLUDE_FILES}" \
+          tar --exclude-vcs --exclude-ignore-recursive=.gitignore --exclude-from "${DIST_EXCLUDE_FILES}" \
           -zcvf "${DIST_ARCHIVE_DIR}/${TENANT_NAME}-${TARBALL_VERSION}".tar.gz $(get_include_path) \
           -C "${DIST_TMP_DIR}"/ .
           echo ">INFO: create tarball with version ${TARBALL_VERSION} by path ${DIST_ARCHIVE_DIR}."
