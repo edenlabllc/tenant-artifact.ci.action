@@ -126,7 +126,3 @@ runs:
         prepare_gitignore
         upload_artifact
       shell: bash
-
-branding:
-  icon: star
-  color: green
