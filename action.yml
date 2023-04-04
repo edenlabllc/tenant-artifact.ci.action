@@ -70,6 +70,7 @@ runs:
         readonly DIST_DIR="dist"
         readonly DIST_TMP_DIR="${DIST_DIR}/tmp"
         readonly DIST_ARCHIVE_DIR="${DIST_DIR}/archive"
+        readonly DIST_EXCLUDE_FILES="${DIST_TMP_DIR}/exclude_files"
         
         echo
         echo "Install RMK."
@@ -100,6 +101,10 @@ runs:
           echo ">INFO: prepare .gitignore file for new artifact."
         }
         
+        function prepare_exclude_files() {
+          ls etc/*/*/secrets/*.yaml > "${DIST_EXCLUDE_FILES}"
+        }
+        
         function get_include_path() {
           ARCHIVE_LIST=""
           for ITEM in $(echo "${INCLUDE_PATHS}" | yq  '.[]'); do
@@ -117,14 +122,17 @@ runs:
           local TENANT_NAME="$(rmk config view | tail +2 | yq '.tenant')"
           local BUCKET_NAME="edenlabllc-${TENANT_NAME}-artifacts-infra"
           
-          tar -zcf "${DIST_ARCHIVE_DIR}/${TENANT_NAME}-${TARBALL_VERSION}".tar.gz $(get_include_path) -C "${DIST_TMP_DIR}"/ .
+          tar --exclude-from "${DIST_EXCLUDE_FILES}" -zcf "${DIST_ARCHIVE_DIR}/${TENANT_NAME}-${TARBALL_VERSION}".tar.gz $(get_include_path) -C "${DIST_TMP_DIR}"/ .
           echo ">INFO: create tarball with version ${TARBALL_VERSION} by path ${DIST_ARCHIVE_DIR}."
           echo ">INFO: start upload on s3 bucket: ${BUCKET_NAME}"
           aws s3 sync "${DIST_ARCHIVE_DIR}" s3://"${BUCKET_NAME}"/"${TARBALL_VERSION}" --delete
         }
         
+        # download all rmk dependencies by version.yaml
         rmk_get_dependencies
+        # create DIST dir for artifact
         create_dir
         prepare_gitignore
+        prepare_exclude_files
         upload_artifact
       shell: bash
