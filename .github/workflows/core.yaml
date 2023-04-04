@@ -1,0 +1,39 @@
+name: Core FHIR ECR build action CI
+
+on:
+  push:
+    branches:
+      - master
+      - feature/*
+
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  CORE_AWS_REGION: eu-north-1
+  REPOSITORY_NAME: core.fhir.ecr_build_push.action
+  VERSION: v1
+
+jobs:
+  ecr-build-push:
+    name: Checkout main and tenant-artifact action repositories, release action
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Initialize environment variables
+        run: |
+          GIT_BRANCH="${GITHUB_REF#refs/heads/}"
+
+          if [[ "master" != "${GIT_BRANCH}" ]]; then
+            # tmp versions might be useful while developing the action and producing tmp images in ECR
+            VERSION="${VERSION}-develop"
+          fi
+
+          echo "GIT_BRANCH=${GIT_BRANCH}" >> ${GITHUB_ENV}
+          echo "VERSION=${VERSION}" >> ${GITHUB_ENV}
+
+      - name: Checkout main repository
+        uses: actions/checkout@v2
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Release service
+        run: |
+          ./release-service.sh ${{ env.VERSION }} ${{ env.GIT_BRANCH }} ${{ env.GITHUB_SHA }} ""

@@ -1,0 +1,132 @@
+name: Create and upload tenant Artifact
+description: Create and upload tenant Artifact to S3 specific bucket by semver.
+
+inputs:
+  github_token_repo_full_access:
+    description: GitHub token with full access permissions to repositories.
+    required: true
+    default: ""
+  core_aws_region:
+    description: AWS region of the AWS account storing artifact in S3.
+    required: true
+  core_aws_access_key_id:
+    description: AWS access key ID of the AWS account storing artifact in S3.
+    required: true
+  core_aws_secret_key:
+    description: AWS secret access key of the AWS account storing artifact in S3.
+    required: true
+  tarball_version:
+    description: Artifact release version, mandatory in semver mode.
+    required: true
+  rmk_version:
+    description: EKS cluster name of the AWS account deploying applications to EKS.
+    required: false
+    default: latest
+  rmk_release_skip_context_switch:
+    description: Skip context switch for not provisioned cluster.
+    required: false
+    default: true
+  skip_generate_certs_linkerd:
+    description: Skip generate certs linkerd for not provisioned cluster.
+    required: false
+    default: true
+  include_paths:
+    description: |
+      List of files and directories that will be included in the distribution archive.
+      Example:
+      include_paths: |
+        - .deps
+        - .helmfile
+        - docs
+        - etc
+        - helmfile.yaml
+        - README.md
+        - version.yaml
+    required: false
+    default: |
+      - .deps
+      - .helmfile
+      - docs
+      - etc
+      - helmfile.yaml
+      - README.md
+      - version.yaml
+
+runs:
+  using: composite
+  steps:
+    - run: |
+        set -e
+        
+        readonly GITHUB_TOKEN='${{ inputs.github_token_repo_full_access }}'
+        readonly AWS_REGION='${{ inputs.core_aws_region }}'
+        readonly AWS_ACCESS_KEY_ID='${{ inputs.core_aws_access_key_id }}'
+        readonly AWS_SECRET_ACCESS_KEY='${{ inputs.core_aws_secret_key }}'
+        readonly TARBALL_VERSION='${{ inputs.tarball_version }}'
+        readonly RMK_VERSION='${{ inputs.rmk_version }}'
+        readonly RMK_RELEASE_SKIP_CONTEXT_SWITCH='${{ inputs.rmk_release_skip_context_switch }}'
+        readonly SKIP_GENERATE_CERTS_LINKERD='${{ inputs.skip_generate_certs_linkerd }}'
+        readonly INCLUDE_PATHS='${{ inputs.include_paths }}'
+        readonly DIST_DIR="dist"
+        readonly DIST_TMP_DIR="${DIST_DIR}/tmp"
+        readonly DIST_ARCHIVE_DIR="${DIST_DIR}/archive"
+        
+        echo
+        echo "Install RMK."
+        curl -sL "https://edenlabllc-rmk-tools-infra.s3.eu-north-1.amazonaws.com/rmk/s3-installer" | bash -s -- "${RMK_VERSION}"
+        rmk --version
+        
+        function rmk_get_dependencies() {
+          rmk config init --progress-bar=false
+          rmk release list 1> /dev/null
+        }
+        
+        function create_dir() {
+          rm -rf "${DIST_DIR}"
+          mkdir -p "${DIST_TMP_DIR}"
+          mkdir -p "${DIST_ARCHIVE_DIR}"
+          echo ">INFO: created ${DIST_DIR} dirs."
+        }
+        
+        function prepare_gitignore() {
+          cat <<EOF > "${DIST_TMP_DIR}"/.gitignore
+        .DS_Store
+        .idea/
+        **.dec
+        sops-age-keys/
+        EOF
+          echo ">INFO: prepare .gitignore file for new artifact."
+        }
+        
+        function get_include_path() {
+          ARCHIVE_LIST=""
+          for ITEM in $(echo "${INCLUDE_PATHS}" | yq  '.[]'); do
+            if [[ -d "${ITEM}" ]]; then
+              ARCHIVE_LIST="${ARCHIVE_LIST}${ITEM}/ "
+            else
+              ARCHIVE_LIST="${ARCHIVE_LIST}${ITEM} "
+            fi
+          done
+        
+          echo "${ARCHIVE_LIST}"
+        }
+        
+        function upload_artifact() {         
+          local TENANT_NAME="$(rmk config view | tail +2 | yq '.tenant')"
+          local BUCKET_NAME="edenlabllc-${TENANT_NAME}-artifacts-infra"
+          
+          tar -zcf "${DIST_ARCHIVE_DIR}/${TENANT_NAME}-${TARBALL_VERSION}".tar.gz $(get_include_path) -C "${DIST_TMP_DIR}"/ .
+          echo ">INFO: create tarball with version ${TARBALL_VERSION} by path ${DIST_ARCHIVE_DIR}."
+          echo ">INFO: start upload on s3 bucket: ${BUCKET_NAME}"
+          aws s3 sync "${DIST_ARCHIVE_DIR}" s3://"${BUCKET_NAME}"/"${TARBALL_VERSION}" --delete
+        }
+        
+        rmk_get_dependencies
+        create_dir
+        prepare_gitignore
+        upload_artifact
+      shell: bash
+
+branding:
+  icon: star
+  color: green
