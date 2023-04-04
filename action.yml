@@ -92,8 +92,10 @@ runs:
           cat <<EOF > "${DIST_TMP_DIR}"/.gitignore
         .DS_Store
         .idea/
+        .env
         **.dec
         sops-age-keys/
+        dist/
         EOF
           echo ">INFO: prepare .gitignore file for new artifact."
         }
