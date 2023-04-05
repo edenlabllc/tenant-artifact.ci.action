@@ -51,6 +51,9 @@ inputs:
       - helmfile.yaml
       - README.md
       - version.yaml
+  exclude_pattern:
+    description: test
+    required: false
 
 runs:
   using: composite
@@ -67,6 +70,7 @@ runs:
         readonly TARBALL_VERSION='${{ inputs.tarball_version }}'
         readonly RMK_VERSION='${{ inputs.rmk_version }}'
         readonly INCLUDE_PATHS='${{ inputs.include_paths }}'
+        readonly EXCLUDE_PATTERN='${{ inputs.exclude_pattern }}'
         readonly DIST_DIR="dist"
         readonly DIST_TMP_DIR="${DIST_DIR}/tmp"
         readonly DIST_ARCHIVE_DIR="${DIST_DIR}/archive"
@@ -103,7 +107,6 @@ runs:
         
         function prepare_exclude_files() {
           ls etc/*/*/secrets/*.yaml > "${DIST_EXCLUDE_FILES}"
-          echo "**.git/" >> "${DIST_EXCLUDE_FILES}"
         }
         
         function get_include_path() {
@@ -123,7 +126,7 @@ runs:
           local TENANT_NAME="$(rmk config view | tail +2 | yq '.tenant')"
           local BUCKET_NAME="edenlabllc-${TENANT_NAME}-artifacts-infra"
           tar --version 
-          tar --exclude-from "${DIST_EXCLUDE_FILES}" \
+          tar --exclude "${EXCLUDE_PATTERN}" --exclude-from "${DIST_EXCLUDE_FILES}" \
           -zcvf "${DIST_ARCHIVE_DIR}/${TENANT_NAME}-${TARBALL_VERSION}".tar.gz $(get_include_path) \
           -C "${DIST_TMP_DIR}"/ .
           echo ">INFO: create tarball with version ${TARBALL_VERSION} by path ${DIST_ARCHIVE_DIR}."
