@@ -30,6 +30,9 @@ inputs:
     description: Skip generate certs linkerd for not provisioned cluster.
     required: false
     default: true
+  custom_tenant_name:
+    description: Custom Tenant name for different client repo.
+    required: false
   include_paths:
     description: |
       List of files and directories that will be included in the distribution archive.
@@ -66,6 +69,7 @@ runs:
         export SKIP_GENERATE_CERTS_LINKERD='${{ inputs.skip_generate_certs_linkerd }}'
         readonly TARBALL_VERSION='${{ inputs.tarball_version }}'
         readonly RMK_VERSION='${{ inputs.rmk_version }}'
+        readonly CUSTOM_TENANT_NAME='${{ inputs.custom_tenant_name }}'
         readonly INCLUDE_PATHS='${{ inputs.include_paths }}'
         readonly DIST_DIR="dist"
         readonly DIST_TMP_DIR="${DIST_DIR}/tmp"
@@ -118,8 +122,13 @@ runs:
           echo "${ARCHIVE_LIST}"
         }
         
-        function upload_artifact() {         
-          local TENANT_NAME="$(rmk config view | tail +2 | yq '.tenant')"
+        function upload_artifact() {
+          if [[ -z "${CUSTOM_TENANT_NAME}" ]]; then
+            TENANT_NAME="$(rmk config view | tail +2 | yq '.tenant')"
+          else
+            TENANT_NAME="${CUSTOM_TENANT_NAME}"
+          fi
+        
           local BUCKET_NAME="edenlabllc-${TENANT_NAME}-artifacts-infra"
           tar --version 
           tar --exclude '*.git' --exclude-from "${DIST_EXCLUDE_FILES}" \
