@@ -21,7 +21,7 @@ inputs:
     required: true
   tarball_version:
     description: Artifact release version, mandatory in semver mode.
-    required: true
+    required: false
   rmk_version:
     description: EKS cluster name of the AWS account deploying applications to EKS.
     required: false
