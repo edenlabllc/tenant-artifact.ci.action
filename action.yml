@@ -2,6 +2,10 @@ name: Create and upload tenant Artifact
 description: Create and upload tenant Artifact to S3 specific bucket by semver.
 
 inputs:
+  autotag:
+    description: Enable auto tagging when merging into target branch.
+    required: false
+    default: false
   github_token_repo_full_access:
     description: GitHub token with full access permissions to repositories.
     required: true
@@ -67,7 +71,8 @@ runs:
         export AWS_SECRET_ACCESS_KEY='${{ inputs.core_aws_secret_key }}'
         export RMK_RELEASE_SKIP_CONTEXT_SWITCH='${{ inputs.rmk_release_skip_context_switch }}'
         export SKIP_GENERATE_CERTS_LINKERD='${{ inputs.skip_generate_certs_linkerd }}'
-        readonly TARBALL_VERSION='${{ inputs.tarball_version }}'
+        
+        readonly AUTOTAG='${{ inputs.autotag }}'
         readonly RMK_VERSION='${{ inputs.rmk_version }}'
         readonly CUSTOM_TENANT_NAME='${{ inputs.custom_tenant_name }}'
         readonly INCLUDE_PATHS='${{ inputs.include_paths }}'
@@ -75,6 +80,48 @@ runs:
         readonly DIST_TMP_DIR="${DIST_DIR}/tmp"
         readonly DIST_ARCHIVE_DIR="${DIST_DIR}/archive"
         readonly DIST_EXCLUDE_FILES="${DIST_DIR}/exclude_files"
+        
+        TARBALL_VERSION='${{ inputs.tarball_version }}'
+        
+        if [[ "${AUTOTAG}" == "true" ]]; then
+          GITHUB_ORG="${GITHUB_REPOSITORY%%/*}"
+          
+          if [[ "${GITHUB_REF}" != refs/heads/* ]]; then
+            >&2 echo "Only pushes to branches are supported. Check the workflow's on.push.* section."
+            exit 1
+          fi
+        
+          GIT_BRANCH="${GITHUB_REF#refs/heads/}"
+        
+          echo "Git commit message: $(git log -1 --pretty=format:"%s")"
+          GIT_COMMIT_MSG="$(git log -1 --pretty=format:"%s")"
+        
+          function check_commit() {
+            if [[ ! "${GIT_COMMIT_MSG}" =~ ^Merge\ pull\ request\ #[0-9]+\ from\ ${GITHUB_ORG}/${1}(v[0-9]+\.[0-9]+\.[0-9]+)-${GIT_BRANCH}$ ]]; then
+              >&2 echo "Pushes to ${2} should be done via merges of PR requests from ${1}vN.N.N-${GIT_BRANCH} branches only."
+              >&2 echo "The expected message format (will be used for parsing a release tag):"
+              >&2 echo "Merge pull request #N from ${GITHUB_ORG}/${1}vN.N.N-${GIT_BRANCH}"
+              exit 1
+            fi
+          }
+
+          case "${GIT_BRANCH}" in
+            develop)
+              check_commit "feature/"
+              ;;
+            staging)
+              check_commit "release/"
+              ;;
+            production)
+              check_commit ""
+              ;;
+          esac
+        
+          TARBALL_VERSION="${BASH_REMATCH[1]}-${GIT_BRANCH}"
+        
+          git tag "${TARBALL_VERSION}"
+          git push origin "${TARBALL_VERSION}"
+        fi
         
         echo
         echo "Install RMK."
