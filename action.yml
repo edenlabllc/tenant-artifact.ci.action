@@ -123,6 +123,11 @@ runs:
           git push origin "${TARBALL_VERSION}"
         fi
         
+        if [[ -z "${TARBALL_VERSION}" ]]; then
+          >&2 echo "ERROR: Failed to get tarball version from branch name or input parameter"
+          exit 1
+        fi
+        
         echo
         echo "Install RMK."
         curl -sL "https://edenlabllc-rmk-tools-infra.s3.eu-north-1.amazonaws.com/rmk/s3-installer" | bash -s -- "${RMK_VERSION}"
