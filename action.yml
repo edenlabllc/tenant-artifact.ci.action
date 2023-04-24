@@ -41,23 +41,9 @@ inputs:
     description: |
       List of files and directories that will be included in the distribution archive.
       Example:
-      include_paths: |
-        - .deps
-        - .helmfile
-        - docs
-        - etc
-        - helmfile.yaml
-        - README.md
-        - version.yaml
+      include_paths: .deps .helmfile docs etc helmfile.yaml README.md version.yaml
     required: false
-    default: |
-      - .deps
-      - .helmfile
-      - docs
-      - etc
-      - helmfile.yaml
-      - README.md
-      - version.yaml
+    default: ".deps .helmfile docs etc helmfile.yaml README.md version.yaml"
 
 runs:
   using: composite
@@ -75,7 +61,7 @@ runs:
         readonly AUTOTAG='${{ inputs.autotag }}'
         readonly RMK_VERSION='${{ inputs.rmk_version }}'
         readonly CUSTOM_TENANT_NAME='${{ inputs.custom_tenant_name }}'
-        readonly INCLUDE_PATHS='${{ inputs.include_paths }}'
+        readonly INCLUDE_PATHS=(${{ inputs.include_paths }})
         readonly DIST_DIR="dist"
         readonly DIST_TMP_DIR="${DIST_DIR}/tmp"
         readonly DIST_ARCHIVE_DIR="${DIST_DIR}/archive"
@@ -165,7 +151,7 @@ runs:
         
         function get_include_path() {
           ARCHIVE_LIST=""
-          for ITEM in $(echo "${INCLUDE_PATHS}" | yq  '.[]'); do
+          for ITEM in "${INCLUDE_PATHS[@]}"; do
             if [[ -d "${ITEM}" ]]; then
               ARCHIVE_LIST="${ARCHIVE_LIST}${ITEM}/ "
             else
