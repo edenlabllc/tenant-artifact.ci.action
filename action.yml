@@ -134,7 +134,8 @@ runs:
         rmk --version
         
         function rmk_get_dependencies() {
-          rmk config init --progress-bar=false --sops-age-keys-download=false
+          rmk config init --progress-bar=false
+          touch $(rmk config view | tail +2 | yq '.sops-age-keys')/.keys.txt
           rmk release list 1> /dev/null
         }
         
