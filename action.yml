@@ -84,7 +84,7 @@ runs:
         
           function check_commit() {
             if [[ ! "${GIT_COMMIT_MSG}" =~ ^Merge\ pull\ request\ #[0-9]+\ from\ ${GITHUB_ORG}/${1}(v[0-9]+\.[0-9]+\.[0-9]+)-${GIT_BRANCH}$ ]]; then
-              >&2 echo "Pushes to ${2} should be done via merges of PR requests from ${1}vN.N.N-${GIT_BRANCH} branches only."
+              >&2 echo "Pushes to ${GIT_BRANCH} should be done via merges of PR requests from ${1}vN.N.N-${GIT_BRANCH} branches only."
               >&2 echo "The expected message format (will be used for parsing a release tag):"
               >&2 echo "Merge pull request #N from ${GITHUB_ORG}/${1}vN.N.N-${GIT_BRANCH}"
               exit 1
