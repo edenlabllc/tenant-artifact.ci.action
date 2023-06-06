@@ -145,6 +145,7 @@ runs:
         
         function prepare_exclude_files() {
           if ! (ls etc/*/*/secrets/*.yaml); then
+            touch "${DIST_EXCLUDE_FILES}"
             return 0
           fi
         
