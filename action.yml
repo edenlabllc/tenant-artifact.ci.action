@@ -19,7 +19,7 @@ inputs:
   core_aws_secret_key:
     description: AWS secret access key of the AWS account storing artifact in S3.
     required: true
-  tarball_version:
+  artifact_version:
     description: Artifact release version, mandatory in semver mode.
     required: false
   rmk_version:
@@ -67,13 +67,21 @@ runs:
         readonly DIST_ARCHIVE_DIR="${DIST_DIR}/archive"
         readonly DIST_EXCLUDE_FILES="${DIST_DIR}/exclude_files"
         
-        TARBALL_VERSION='${{ inputs.tarball_version }}'
+        ARTIFACT_VERSION='${{ inputs.artifact_version }}'
         
-        if [[ "${AUTOTAG}" == "true" ]]; then
+        function autotag() {
           GITHUB_ORG="${GITHUB_REPOSITORY%%/*}"
+        
+          # sort all Git tags DESC and filter out non-release tags like vN.N.N-XXXXXXX
+          VERSION_PREV="$(git tag -l --sort=v:refname | grep -v "-" | tail -1)"
+          if [[ -z "${VERSION_PREV}" ]]; then
+            >&2 echo "At least one version is required in the repository."
+            >&2 echo "Tag a Git commit of the production branch manually before running the workflow."
+            exit 1
+          fi
           
-          if [[ "${GITHUB_REF}" != refs/heads/* ]]; then
-            >&2 echo "Only pushes to branches are supported. Check the workflow's on.push.* section."
+          if [[ "${GITHUB_REF}" != refs/heads/production ]]; then
+            >&2 echo "Only pushes to production branch are supported. Check the workflow's on.push.* section."
             exit 1
           fi
         
@@ -81,36 +89,26 @@ runs:
         
           echo "Git commit message: $(git log -1 --pretty=format:"%s")"
           GIT_COMMIT_MSG="$(git log -1 --pretty=format:"%s")"
-        
-          function check_commit() {
-            if [[ ! "${GIT_COMMIT_MSG}" =~ ^Merge\ pull\ request\ #[0-9]+\ from\ ${GITHUB_ORG}/${1}(v[0-9]+\.[0-9]+\.[0-9]+)-${GIT_BRANCH}$ ]]; then
-              >&2 echo "Pushes to ${GIT_BRANCH} should be done via merges of PR requests from ${1}vN.N.N-${GIT_BRANCH} branches only."
-              >&2 echo "The expected message format (will be used for parsing a release tag):"
-              >&2 echo "Merge pull request #N from ${GITHUB_ORG}/${1}vN.N.N-${GIT_BRANCH}"
-              exit 1
-            fi
-          }
 
-          case "${GIT_BRANCH}" in
-            develop)
-              check_commit "feature/"
-              ;;
-            staging)
-              check_commit "release/"
-              ;;
-            production)
-              check_commit ""
-              ;;
-          esac
+          if [[ ! "${GIT_COMMIT_MSG}" =~ ^Merge\ pull\ request\ #[0-9]+\ from\ ${GITHUB_ORG}/release/(v[0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            >&2 echo "Pushes to ${GIT_BRANCH} should be done via merges of PR requests from release/vN.N.N branches only."
+            >&2 echo "The expected message format (will be used for parsing a release tag):"
+            >&2 echo "Merge pull request #N from ${GITHUB_ORG}/release/vN.N.N"
+            exit 1
+          fi
+
+          ARTIFACT_VERSION="${BASH_REMATCH[1]}"
         
-          TARBALL_VERSION="${BASH_REMATCH[1]}-${GIT_BRANCH}"
+          git tag "${ARTIFACT_VERSION}"
+          git push origin "${ARTIFACT_VERSION}"
+        }
         
-          git tag "${TARBALL_VERSION}"
-          git push origin "${TARBALL_VERSION}"
+        if [[ "${AUTOTAG}" == "true" ]]; then
+          autotag
         fi
         
-        if [[ -z "${TARBALL_VERSION}" ]]; then
-          >&2 echo "ERROR: Failed to get tarball version from branch name or input parameter"
+        if [[ -z "${ARTIFACT_VERSION}" ]]; then
+          >&2 echo "ERROR: Failed to get artifact version from branch name or input parameter"
           exit 1
         fi
         
@@ -172,11 +170,11 @@ runs:
           local BUCKET_NAME="edenlabllc-${TENANT_NAME}-artifacts-infra"
           tar --version 
           tar --exclude '*.git' --exclude-from "${DIST_EXCLUDE_FILES}" \
-          -zcvf "${DIST_ARCHIVE_DIR}/${TENANT_NAME}-${TARBALL_VERSION}".tar.gz $(get_include_path) \
+          -zcvf "${DIST_ARCHIVE_DIR}/${TENANT_NAME}-${ARTIFACT_VERSION}".tar.gz $(get_include_path) \
           -C "${DIST_TMP_DIR}"/ .
-          echo ">INFO: create tarball with version ${TARBALL_VERSION} by path ${DIST_ARCHIVE_DIR}."
+          echo ">INFO: create artifact with version ${ARTIFACT_VERSION} by path ${DIST_ARCHIVE_DIR}."
           echo ">INFO: start upload on s3 bucket: ${BUCKET_NAME}"
-          aws s3 sync "${DIST_ARCHIVE_DIR}" s3://"${BUCKET_NAME}"/"${TARBALL_VERSION}" --delete
+          aws s3 sync "${DIST_ARCHIVE_DIR}" s3://"${BUCKET_NAME}"/"${ARTIFACT_VERSION}" --delete
         }
         
         # download all rmk dependencies by version.yaml
