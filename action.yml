@@ -98,9 +98,26 @@ runs:
           fi
 
           ARTIFACT_VERSION="${BASH_REMATCH[1]}"
+              
+          echo "Configure Git user.name and user.email."
+          git config user.name github-actions
+          git config user.email github-actions@github.com
         
-          git tag "${ARTIFACT_VERSION}"
-          git push origin "${ARTIFACT_VERSION}"
+          echo "Add Git tag ${ARTIFACT_VERSION}."
+          git tag -a "${ARTIFACT_VERSION}" -m "Release ${ARTIFACT_VERSION}"
+          git push origin "${ARTIFACT_VERSION}" -f
+        
+          if (gh release view "${ARTIFACT_VERSION}" &> /dev/null); then
+            echo "GitHub release ${ARTIFACT_VERSION} already exists."
+            echo "Skipped."
+          else
+            echo "Create GitHub release ${ARTIFACT_VERSION}."
+            gh release create "${ARTIFACT_VERSION}" \
+              --title "Artifact version - ${ARTIFACT_VERSION}" \
+              --target "${GITHUB_SHA}" \
+              --notes 'All dependency versions for the artifact version: `v0.2.0` are described in the asset file: `version.yaml`' \
+              version.yaml
+          fi
         }
         
         if [[ "${AUTOTAG}" == "true" ]]; then
