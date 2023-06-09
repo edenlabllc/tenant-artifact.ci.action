@@ -23,7 +23,7 @@ inputs:
     description: Artifact release version, mandatory in semver mode.
     required: false
   push_tag:
-    description: Force push a tag from the current branch.
+    description: Manual push a tag from the current branch.
     required: false
     default: false
   rmk_version:
@@ -127,7 +127,7 @@ runs:
         fi
         
         if [[ -z "${ARTIFACT_VERSION}" ]]; then
-          >&2 echo "ERROR: Failed to get artifact version from branch name or input parameter"
+          >&2 echo "Failed to get artifact version from branch name or input parameter"
           exit 1
         fi
         
@@ -200,8 +200,8 @@ runs:
           tar --exclude '*.git' --exclude-from "${DIST_EXCLUDE_FILES}" \
           -zcvf "${DIST_ARCHIVE_DIR}/${TENANT_NAME}-${ARTIFACT_VERSION}".tar.gz $(get_include_path) \
           -C "${DIST_TMP_DIR}"/ .
-          echo "create artifact with version ${ARTIFACT_VERSION} by path ${DIST_ARCHIVE_DIR}."
-          echo "start upload on s3 bucket: ${BUCKET_NAME}"
+          echo "Create artifact with version ${ARTIFACT_VERSION} by path ${DIST_ARCHIVE_DIR}."
+          echo "Start upload on s3 bucket: ${BUCKET_NAME}"
           aws s3 sync "${DIST_ARCHIVE_DIR}" s3://"${BUCKET_NAME}"/"${ARTIFACT_VERSION}" --delete
         }
         
