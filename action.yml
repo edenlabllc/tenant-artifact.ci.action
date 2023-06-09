@@ -22,6 +22,10 @@ inputs:
   artifact_version:
     description: Artifact release version, mandatory in semver mode.
     required: false
+  push_tag:
+    description: Manual push a tag from the current branch.
+    required: false
+    default: false
   rmk_version:
     description: EKS cluster name of the AWS account deploying applications to EKS.
     required: false
@@ -59,6 +63,8 @@ runs:
         export SKIP_GENERATE_CERTS_LINKERD='${{ inputs.skip_generate_certs_linkerd }}'
         
         readonly AUTOTAG='${{ inputs.autotag }}'
+        readonly PUSH_TAG='${{ inputs.push_tag }}'
+        
         readonly RMK_VERSION='${{ inputs.rmk_version }}'
         readonly CUSTOM_TENANT_NAME='${{ inputs.custom_tenant_name }}'
         readonly INCLUDE_PATHS=(${{ inputs.include_paths }})
@@ -69,19 +75,33 @@ runs:
         
         ARTIFACT_VERSION='${{ inputs.artifact_version }}'
         
+        function push_tag() {
+          echo "Configure Git user.name and user.email."
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+        
+          echo "Add Git tag ${ARTIFACT_VERSION}."
+          git tag -a "${ARTIFACT_VERSION}" -m "Release ${ARTIFACT_VERSION}"
+          git push origin "${ARTIFACT_VERSION}"
+        
+          if (gh release view "${ARTIFACT_VERSION}" &> /dev/null); then
+            echo "GitHub release ${ARTIFACT_VERSION} already exists."
+            echo "Skipped."
+          else
+            echo "Create GitHub release ${ARTIFACT_VERSION}."
+            gh release create "${ARTIFACT_VERSION}" \
+              --title "Artifact version - ${ARTIFACT_VERSION}" \
+              --target "${GITHUB_SHA}" \
+              --notes 'All dependency versions for the artifact version: `'"${ARTIFACT_VERSION}"'` are described in the asset file: `version.yaml`' \
+              version.yaml
+          fi
+        }
+        
         function autotag() {
           GITHUB_ORG="${GITHUB_REPOSITORY%%/*}"
-        
-          # sort all Git tags DESC and filter out non-release tags like vN.N.N-XXXXXXX
-          VERSION_PREV="$(git tag -l --sort=v:refname | grep -v "-" | tail -1)"
-          if [[ -z "${VERSION_PREV}" ]]; then
-            >&2 echo "At least one version is required in the repository."
-            >&2 echo "Tag a Git commit of the production branch manually before running the workflow."
-            exit 1
-          fi
           
-          if [[ "${GITHUB_REF}" != refs/heads/production ]]; then
-            >&2 echo "Only pushes to production branch are supported. Check the workflow's on.push.* section."
+          if ! [[ "${GITHUB_REF}" =~ refs/heads/(staging|production) ]]; then
+            >&2 echo "Only pushes to staging and production branches are supported. Check the workflow's on.push.* section."
             exit 1
           fi
         
@@ -99,25 +119,7 @@ runs:
 
           ARTIFACT_VERSION="${BASH_REMATCH[1]}"
               
-          echo "Configure Git user.name and user.email."
-          git config user.name github-actions
-          git config user.email github-actions@github.com
-        
-          echo "Add Git tag ${ARTIFACT_VERSION}."
-          git tag -a "${ARTIFACT_VERSION}" -m "Release ${ARTIFACT_VERSION}"
-          git push origin "${ARTIFACT_VERSION}" -f
-        
-          if (gh release view "${ARTIFACT_VERSION}" &> /dev/null); then
-            echo "GitHub release ${ARTIFACT_VERSION} already exists."
-            echo "Skipped."
-          else
-            echo "Create GitHub release ${ARTIFACT_VERSION}."
-            gh release create "${ARTIFACT_VERSION}" \
-              --title "Artifact version - ${ARTIFACT_VERSION}" \
-              --target "${GITHUB_SHA}" \
-              --notes 'All dependency versions for the artifact version: `v0.2.0` are described in the asset file: `version.yaml`' \
-              version.yaml
-          fi
+          push_tag
         }
         
         if [[ "${AUTOTAG}" == "true" ]]; then
@@ -125,8 +127,12 @@ runs:
         fi
         
         if [[ -z "${ARTIFACT_VERSION}" ]]; then
-          >&2 echo "ERROR: Failed to get artifact version from branch name or input parameter"
+          >&2 echo "Failed to get artifact version from branch name or input parameter"
           exit 1
+        fi
+        
+        if [[ "${PUSH_TAG}" == "true" ]]; then
+          push_tag
         fi
         
         echo
@@ -194,8 +200,8 @@ runs:
           tar --exclude '*.git' --exclude-from "${DIST_EXCLUDE_FILES}" \
           -zcvf "${DIST_ARCHIVE_DIR}/${TENANT_NAME}-${ARTIFACT_VERSION}".tar.gz $(get_include_path) \
           -C "${DIST_TMP_DIR}"/ .
-          echo ">INFO: create artifact with version ${ARTIFACT_VERSION} by path ${DIST_ARCHIVE_DIR}."
-          echo ">INFO: start upload on s3 bucket: ${BUCKET_NAME}"
+          echo "Create artifact with version ${ARTIFACT_VERSION} by path ${DIST_ARCHIVE_DIR}."
+          echo "Start upload on s3 bucket: ${BUCKET_NAME}"
           aws s3 sync "${DIST_ARCHIVE_DIR}" s3://"${BUCKET_NAME}"/"${ARTIFACT_VERSION}" --delete
         }
         
