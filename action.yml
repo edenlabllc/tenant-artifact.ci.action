@@ -38,6 +38,10 @@ inputs:
     description: Skip generate certs linkerd for not provisioned cluster.
     required: false
     default: true
+  skip_release_artifact:
+    description: Skip release artifact to artifacts S3 storage.
+    required: false
+    default: false
   custom_tenant_name:
     description: Custom Tenant name for different client repo.
     required: false
@@ -61,6 +65,7 @@ runs:
         export AWS_SECRET_ACCESS_KEY='${{ inputs.core_aws_secret_key }}'
         export RMK_RELEASE_SKIP_CONTEXT_SWITCH='${{ inputs.rmk_release_skip_context_switch }}'
         export SKIP_GENERATE_CERTS_LINKERD='${{ inputs.skip_generate_certs_linkerd }}'
+        export SKIP_RELEASE_ARTIFACT='${{ inputs.skip_release_artifact }}'
         
         readonly AUTOTAG='${{ inputs.autotag }}'
         readonly PUSH_TAG='${{ inputs.push_tag }}'
@@ -113,7 +118,7 @@ runs:
           if [[ ! "${GIT_COMMIT_MSG}" =~ ^Merge\ pull\ request\ #[0-9]+\ from\ ${GITHUB_ORG}/release/(v[0-9]+\.[0-9]+\.[0-9]+(-rc)?)$ ]]; then
             >&2 echo "Pushes to ${GIT_BRANCH} should be done via merges of PR requests from release/vN.N.N or release/vN.N.N-rc branches only."
             >&2 echo "The expected message format (will be used for parsing a release tag):"
-            >&2 echo "Merge pull request #N from ${GITHUB_ORG}/release/vN.N.N or ${GITHUB_ORG}/release/vN.N.N-rc"
+            >&2 echo "Merge pull request #N from ${GITHUB_ORG}/release/vN.N.N or ${GITHUB_ORG}/release/vN.N.N-rc."
             exit 1
           fi
 
@@ -127,12 +132,17 @@ runs:
         fi
         
         if [[ -z "${ARTIFACT_VERSION}" ]]; then
-          >&2 echo "Failed to get artifact version from branch name or input parameter"
+          >&2 echo "Failed to get artifact version from branch name or input parameter."
           exit 1
         fi
         
         if [[ "${PUSH_TAG}" == "true" ]]; then
           push_tag
+        fi
+        
+        if [[ "${SKIP_RELEASE_ARTIFACT}" == "true" ]]; then
+          echo "Skip release artifact to artifacts S3 storage."
+          exit 0
         fi
         
         echo
@@ -151,7 +161,7 @@ runs:
           rm -rf "${DIST_DIR}"
           mkdir -p "${DIST_TMP_DIR}"
           mkdir -p "${DIST_ARCHIVE_DIR}"
-          echo ">INFO: created ${DIST_DIR} dirs."
+          echo "Created ${DIST_DIR} dirs."
         }
         
         function prepare_gitignore() {
@@ -163,7 +173,7 @@ runs:
         sops-age-keys/
         dist/
         EOF
-          echo ">INFO: prepare .gitignore file for new artifact."
+          echo "Prepare .gitignore file for new artifact."
         }
         
         function prepare_exclude_files() {
@@ -201,7 +211,7 @@ runs:
           -zcvf "${DIST_ARCHIVE_DIR}/${TENANT_NAME}-${ARTIFACT_VERSION}".tar.gz $(get_include_path) \
           -C "${DIST_TMP_DIR}"/ .
           echo "Create artifact with version ${ARTIFACT_VERSION} by path ${DIST_ARCHIVE_DIR}."
-          echo "Start upload on s3 bucket: ${BUCKET_NAME}"
+          echo "Start upload on s3 bucket: ${BUCKET_NAME}."
           aws s3 sync "${DIST_ARCHIVE_DIR}" s3://"${BUCKET_NAME}"/"${ARTIFACT_VERSION}" --delete
         }
         
