@@ -43,23 +43,23 @@ inputs:
     required: false
     default: false
   slack_notifications:
-    description: Enable slack notifications.
+    description: Enable Slack notifications.
     required: false
     default: false
   slack_webhook:
-    description: Url for slack webhook (required if slack_notifications=true).
+    description: URL for Slack webhook (required if slack_notifications=true).
     required: false
     default: ""
   slack_message_release_notes_path:
     description: |
-      The path relative to the root of the repository to the file with release notes (required if slack_notifications=true).
+      Path relative to the root of the repository to a file with release notes (required if slack_notifications=true).
       Example:
         docs/release-notes.md
     required: false
     default: ""
   slack_message_details:
     description: |
-      Additional information in the body of the slack message (only if slack_notifications=true).
+      Additional information added to the body of the Slack message (only if slack_notifications=true).
     required: false
     default: ""
   custom_tenant_name:
@@ -129,7 +129,7 @@ runs:
             *Artifact published*: '"${ARTIFACT_PUBLISHED}"'\n
             '"${DETAILS_TEXT}"'"}'
         
-          curl -s -X POST -H 'Content-Type: application/json' --data "${DATA}" "${SLACK_WEBHOOK}"
+          curl -s -X POST -H "Content-Type: application/json" --data "${DATA}" "${SLACK_WEBHOOK}"
         }
         
         function push_tag() {
