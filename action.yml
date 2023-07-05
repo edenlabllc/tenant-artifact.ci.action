@@ -42,6 +42,26 @@ inputs:
     description: Skip release artifact to artifacts S3 storage.
     required: false
     default: false
+  slack_notifications:
+    description: Enable Slack notifications.
+    required: false
+    default: false
+  slack_webhook:
+    description: URL for Slack webhook (required if slack_notifications=true).
+    required: false
+    default: ""
+  slack_message_release_notes_path:
+    description: |
+      Path relative to the root of the repository to a file with release notes (required if slack_notifications=true).
+      Example:
+        docs/release-notes.md
+    required: false
+    default: ""
+  slack_message_details:
+    description: |
+      Additional information added to the body of the Slack message (only if slack_notifications=true).
+    required: false
+    default: ""
   custom_tenant_name:
     description: Custom Tenant name for different client repo.
     required: false
@@ -69,7 +89,11 @@ runs:
         
         readonly AUTOTAG='${{ inputs.autotag }}'
         readonly PUSH_TAG='${{ inputs.push_tag }}'
+        readonly SLACK_NOTIFICATIONS='${{ inputs.slack_notifications }}'
         
+        readonly SLACK_WEBHOOK='${{ inputs.slack_webhook }}'
+        readonly SLACK_MESSAGE_RELEASE_NOTES_PATH='${{ inputs.slack_message_release_notes_path }}'
+        readonly SLACK_MESSAGE_DETAILS='${{ inputs.slack_message_details }}'
         readonly RMK_VERSION='${{ inputs.rmk_version }}'
         readonly CUSTOM_TENANT_NAME='${{ inputs.custom_tenant_name }}'
         readonly INCLUDE_PATHS=(${{ inputs.include_paths }})
@@ -79,6 +103,34 @@ runs:
         readonly DIST_EXCLUDE_FILES="${DIST_DIR}/exclude_files"
         
         ARTIFACT_VERSION='${{ inputs.artifact_version }}'
+        
+        function notify_slack() {
+          local TENANT_NAME="${1}"
+          local TAG="${2}"
+          local RELEASE_NOTES_PATH="${3}"
+          local DETAILS="${4}"
+          local ICON_EMOJI=":package:"
+        
+          if [[ "${SKIP_RELEASE_ARTIFACT}" == "true" ]]; then
+            ARTIFACT_PUBLISHED=false
+          else
+            ARTIFACT_PUBLISHED=true
+          fi
+        
+          if [[ -n "${DETAILS}" ]]; then
+            DETAILS_TEXT="*Details*: ${DETAILS}"
+          fi
+        
+          RELEASE_NOTES_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/blob/${TAG}/${RELEASE_NOTES_PATH}"
+        
+          DATA='{"username":"Tenant artifact action","icon_emoji":"'"${ICON_EMOJI}"'","text":
+            "*Released a new version of '"${TENANT_NAME}"'*: <'"${GITHUB_SERVER_URL}"'/'"${GITHUB_REPOSITORY}"'/tree/'"${TAG}"'|'"${TAG}"'>\n
+            *Release notes*: '"${RELEASE_NOTES_URL}"'\n
+            *Artifact published*: '"${ARTIFACT_PUBLISHED}"'\n
+            '"${DETAILS_TEXT}"'"}'
+        
+          curl -s -X POST -H "Content-Type: application/json" --data "${DATA}" "${SLACK_WEBHOOK}"
+        }
         
         function push_tag() {
           echo "Configure Git user.name and user.email."
@@ -141,6 +193,17 @@ runs:
         fi
         
         if [[ "${SKIP_RELEASE_ARTIFACT}" == "true" ]]; then
+          if [[ -z "${CUSTOM_TENANT_NAME}" ]]; then
+            TENANT_NAME_RAW="${GITHUB_REPOSITORY%%.*}"
+            TENANT_NAME="${TENANT_NAME_RAW/*\//}"
+          else
+            TENANT_NAME="${CUSTOM_TENANT_NAME}"
+          fi
+        
+          if [[ "${SLACK_NOTIFICATIONS}" == "true" ]]; then
+            notify_slack "${TENANT_NAME}" "${ARTIFACT_VERSION}" "${SLACK_MESSAGE_RELEASE_NOTES_PATH}" "${SLACK_MESSAGE_DETAILS}"
+          fi
+        
           echo "Skip release artifact to artifacts S3 storage."
           exit 0
         fi
@@ -213,6 +276,10 @@ runs:
           echo "Create artifact with version ${ARTIFACT_VERSION} by path ${DIST_ARCHIVE_DIR}."
           echo "Start upload on s3 bucket: ${BUCKET_NAME}."
           aws s3 sync "${DIST_ARCHIVE_DIR}" s3://"${BUCKET_NAME}"/"${ARTIFACT_VERSION}" --delete
+        
+          if [[ "${SLACK_NOTIFICATIONS}" == "true" ]]; then
+            notify_slack "${TENANT_NAME}" "${ARTIFACT_VERSION}" "${SLACK_MESSAGE_RELEASE_NOTES_PATH}" "${SLACK_MESSAGE_DETAILS}"
+          fi
         }
         
         # download all rmk dependencies by version.yaml
