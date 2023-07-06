@@ -179,6 +179,13 @@ runs:
           push_tag
         }
         
+        if [[ "${SLACK_NOTIFICATIONS}" == "true" ]]; then
+          if [[ -z "${SLACK_WEBHOOK}" || -z "${SLACK_MESSAGE_RELEASE_NOTES_PATH}" ]]; then
+            >&2 echo "Both slack_webhook, slack_message_release_notes_path options required when slack_notifications=true."
+            exit 1
+          fi
+        fi
+        
         if [[ "${AUTOTAG}" == "true" ]]; then
           autotag
         fi
