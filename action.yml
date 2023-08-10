@@ -27,9 +27,9 @@ inputs:
     required: false
     default: false
   rmk_version:
-    description: EKS cluster name of the AWS account deploying applications to EKS.
+    description: rmk version.
     required: false
-    default: latest
+    default: v2.10.0
   rmk_release_skip_context_switch:
     description: Skip context switch for not provisioned cluster.
     required: false
