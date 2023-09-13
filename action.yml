@@ -29,7 +29,7 @@ inputs:
   rmk_version:
     description: rmk version.
     required: false
-    default: v2.10.0
+    default: latest
   rmk_release_skip_context_switch:
     description: Skip context switch for not provisioned cluster.
     required: false
