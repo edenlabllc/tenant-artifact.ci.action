@@ -71,7 +71,7 @@ inputs:
       Example:
       include_paths: .deps .helmfile docs etc helmfile.yaml README.md version.yaml
     required: false
-    default: ".deps .helmfile docs etc helmfile.yaml README.md version.yaml"
+    default: ".deps .helmfile docs etc helmfile.yaml* README.md version.yaml"
 
 runs:
   using: composite
