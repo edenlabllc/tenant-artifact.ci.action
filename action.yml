@@ -215,8 +215,16 @@ runs:
         
         function rmk_get_dependencies() {
           rmk config init --progress-bar=false --sops-age-keys-download=false
-          mkdir -p sops-age-keys
-          touch sops-age-keys/.keys.txt
+        
+          # needed for backward compatible between different RMK versions
+          if [[ "${RMK_VERSION}" =~ ^v4+\.[0-9]+\.[0-9]+(-rc)?$ ]]; then
+            mkdir -p .PROJECT/sops-age-keys
+            touch .PROJECT/sops-age-keys/.keys.txt
+          else
+            mkdir -p sops-age-keys
+            touch sops-age-keys/.keys.txt
+          fi
+          
           rmk release list 1> /dev/null
         }
         
