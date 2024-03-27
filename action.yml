@@ -62,6 +62,19 @@ inputs:
       Additional information added to the body of the Slack message (only if slack_notifications=true).
     required: false
     default: ""
+  tenant_environments:
+    description: |
+      List of tenants and environments for automatically updating the dependency version.
+      Example:
+      tenant_environments: |
+        tenant1=env1
+        tenant2=env2
+    required: false
+    default: ""
+  tenant_workflow_file:
+    description: Tenant workflow file with a "on.workflow_dispatch" trigger (only if tenant_environments is specified).
+    required: false
+    default: project-update.yaml
   custom_tenant_name:
     description: Custom Tenant name for different client repo.
     required: false
@@ -86,6 +99,8 @@ runs:
         export RMK_RELEASE_SKIP_CONTEXT_SWITCH='${{ inputs.rmk_release_skip_context_switch }}'
         export SKIP_GENERATE_CERTS_LINKERD='${{ inputs.skip_generate_certs_linkerd }}'
         export SKIP_RELEASE_ARTIFACT='${{ inputs.skip_release_artifact }}'
+        export TENANT_ENVIRONMENTS='${{ inputs.tenant_environments }}'
+        export TENANT_WORKFLOW_FILE='${{ inputs.tenant_workflow_file }}'
         
         readonly AUTOTAG='${{ inputs.autotag }}'
         readonly PUSH_TAG='${{ inputs.push_tag }}'
@@ -94,7 +109,7 @@ runs:
         readonly SLACK_WEBHOOK='${{ inputs.slack_webhook }}'
         readonly SLACK_MESSAGE_RELEASE_NOTES_PATH='${{ inputs.slack_message_release_notes_path }}'
         readonly SLACK_MESSAGE_DETAILS='${{ inputs.slack_message_details }}'
-        readonly RMK_VERSION='${{ inputs.rmk_version }}'
+        readonly INPUT_RMK_VERSION='${{ inputs.rmk_version }}'
         readonly CUSTOM_TENANT_NAME='${{ inputs.custom_tenant_name }}'
         readonly INCLUDE_PATHS=(${{ inputs.include_paths }})
         readonly DIST_DIR="dist"
@@ -210,14 +225,16 @@ runs:
         
         echo
         echo "Install RMK."
-        curl -sL "https://edenlabllc-rmk-tools-infra.s3.eu-north-1.amazonaws.com/rmk/s3-installer" | bash -s -- "${RMK_VERSION}"
-        rmk --version
+        curl -sL "https://edenlabllc-rmk-tools-infra.s3.eu-north-1.amazonaws.com/rmk/s3-installer" | bash -s -- "${INPUT_RMK_VERSION}"
+        RMK_VERSION="$(rmk --version | sed -E 's/^.*\s(.*)$/\1/')"
+        RMK_MAJOR_VERSION="$(echo ${RMK_VERSION} | sed -E 's/^[^0-9]*([0-9]+)\..*$/\1/')"
+        echo "RMK version ${RMK_VERSION}"
         
         function rmk_get_dependencies() {
           rmk config init --progress-bar=false --sops-age-keys-download=false
         
           # needed for backward compatible between different RMK versions
-          if [[ "${RMK_VERSION}" =~ ^v4+\.[0-9]+\.[0-9]+(-rc)?$ ]]; then
+          if [[ "${RMK_MAJOR_VERSION}" -ge "4" ]]; then
             mkdir -p .PROJECT/sops-age-keys
             touch .PROJECT/sops-age-keys/.keys.txt
           else
@@ -290,6 +307,33 @@ runs:
           fi
         }
         
+        function project_update() {
+          if [[ -z "${TENANT_ENVIRONMENTS}" ]]; then
+            echo "Skip project update."
+            exit 0
+          fi
+
+          GITHUB_ORG="${GITHUB_REPOSITORY%%/*}"
+          PROJECT_DEPENDENCY="${GITHUB_REPOSITORY/*\//}"
+        
+          for PROJECT_TENANT_MAP in ${TENANT_ENVIRONMENTS}; do
+            PROJECT_TENANT_MAP="${PROJECT_TENANT_MAP/=/ }"
+            PROJECT_TENANT_MAP=(${PROJECT_TENANT_MAP})
+        
+            PROJECT_TENANT="${PROJECT_TENANT_MAP[0]}"
+            PROJECT_TENANT_ENVIRONMENT="${PROJECT_TENANT_MAP[1]}"
+            PROJECT_TENANT_REPOSITORY="${GITHUB_ORG}/${PROJECT_TENANT}.bootstrap.infra"
+        
+            if [[ -z "${PROJECT_TENANT_ENVIRONMENT}" ]]; then
+              PROJECT_TENANT_ENVIRONMENT="develop"
+            fi
+        
+            gh workflow run "${TENANT_WORKFLOW_FILE}" --repo "${PROJECT_TENANT_REPOSITORY}" --ref "${PROJECT_TENANT_ENVIRONMENT}" -f "project_dependency_name=${PROJECT_DEPENDENCY}" -f "project_dependency_version=${ARTIFACT_VERSION}"
+        
+            echo "Updated ${PROJECT_DEPENDENCY} dependency in the ${PROJECT_TENANT_ENVIRONMENT} branch ${PROJECT_TENANT_REPOSITORY} repository to version ${ARTIFACT_VERSION}."
+          done
+        }
+        
         # download all rmk dependencies by version.yaml
         rmk_get_dependencies
         # create DIST dir for artifact
@@ -297,4 +341,6 @@ runs:
         prepare_gitignore
         prepare_exclude_files
         upload_artifact
+        # update dependency for tenants
+        project_update
       shell: bash
