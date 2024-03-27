@@ -307,7 +307,7 @@ runs:
           fi
         }
         
-        function project_update() {
+        function update_project_dependencies() {
           if [[ -z "${TENANT_ENVIRONMENTS}" ]]; then
             echo "Skip project update."
             exit 0
@@ -342,5 +342,5 @@ runs:
         prepare_exclude_files
         upload_artifact
         # update dependency for tenants
-        project_update
+        update_project_dependencies
       shell: bash
