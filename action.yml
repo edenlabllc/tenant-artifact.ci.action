@@ -82,9 +82,9 @@ inputs:
     description: |
       List of files and directories that will be included in the distribution archive.
       Example:
-      include_paths: .deps .helmfile docs etc helmfile.yaml README.md version.yaml
+      include_paths: .PROJECT docs etc helmfile.yaml* project.yaml README.md
     required: false
-    default: ".deps .helmfile .PROJECT docs etc helmfile.yaml* project.yaml README.md version.yaml"
+    default: ""
 
 runs:
   using: composite
@@ -234,9 +234,15 @@ runs:
         
           # needed for backward compatible between different RMK versions
           if [[ "${RMK_VERSION}" =~ ^v4+\.[0-9]+\.[0-9]+(-rc)?$ ]]; then
+            if [[ -z "${INCLUDE_PATHS}" ]]; then
+              INCLUDE_PATHS=".PROJECT docs etc helmfile.yaml* project.yaml README.md"
+            fi
             mkdir -p .PROJECT/sops-age-keys
             touch .PROJECT/sops-age-keys/.keys.txt
           else
+            if [[ -z "${INCLUDE_PATHS}" ]]; then
+              INCLUDE_PATHS=".deps .helmfile docs etc helmfile.yaml* README.md version.yaml"
+            fi
             mkdir -p sops-age-keys
             touch sops-age-keys/.keys.txt
           fi
@@ -274,7 +280,7 @@ runs:
         
         function get_include_path() {
           ARCHIVE_LIST=""
-          for ITEM in ${INCLUDE_PATHS[@]}; do
+          for ITEM in ${INCLUDE_PATHS[*]}; do
             if [[ -d "${ITEM}" ]]; then
               if [[ "${ITEM}" =~ ^.*/$ ]]; then
                 ARCHIVE_LIST="${ARCHIVE_LIST}${ITEM} "
