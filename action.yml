@@ -84,7 +84,7 @@ inputs:
       Example:
       include_paths: .deps .helmfile docs etc helmfile.yaml README.md version.yaml
     required: false
-    default: ".deps .helmfile docs etc helmfile.yaml* README.md version.yaml"
+    default: ".deps .helmfile .PROJECT docs etc helmfile.yaml* project.yaml README.md version.yaml"
 
 runs:
   using: composite
@@ -227,14 +227,13 @@ runs:
         echo "Install RMK."
         curl -sL "https://edenlabllc-rmk-tools-infra.s3.eu-north-1.amazonaws.com/rmk/s3-installer" | bash -s -- "${INPUT_RMK_VERSION}"
         RMK_VERSION="$(rmk --version | sed -E 's/^.*\s(.*)$/\1/')"
-        RMK_MAJOR_VERSION="$(echo ${RMK_VERSION} | sed -E 's/^[^0-9]*([0-9]+)\..*$/\1/')"
         echo "RMK version ${RMK_VERSION}"
         
         function rmk_get_dependencies() {
           rmk config init --progress-bar=false --sops-age-keys-download=false
         
           # needed for backward compatible between different RMK versions
-          if [[ "${RMK_MAJOR_VERSION}" -ge "4" ]]; then
+          if [[ "${RMK_VERSION}" =~ ^v4+\.[0-9]+\.[0-9]+(-rc)?$ ]]; then
             mkdir -p .PROJECT/sops-age-keys
             touch .PROJECT/sops-age-keys/.keys.txt
           else
@@ -275,10 +274,14 @@ runs:
         
         function get_include_path() {
           ARCHIVE_LIST=""
-          for ITEM in "${INCLUDE_PATHS[@]}"; do
+          for ITEM in ${INCLUDE_PATHS[@]}; do
             if [[ -d "${ITEM}" ]]; then
-              ARCHIVE_LIST="${ARCHIVE_LIST}${ITEM}/ "
-            else
+              if [[ "${ITEM}" =~ ^.*/$ ]]; then
+                ARCHIVE_LIST="${ARCHIVE_LIST}${ITEM} "
+              else
+                ARCHIVE_LIST="${ARCHIVE_LIST}${ITEM}/ "
+              fi
+            elif [[ -f "${ITEM}" ]]; then
               ARCHIVE_LIST="${ARCHIVE_LIST}${ITEM} "
             fi
           done
@@ -313,8 +316,8 @@ runs:
             exit 0
           fi
 
-          GITHUB_ORG="${GITHUB_REPOSITORY%%/*}"
-          PROJECT_DEPENDENCY="${GITHUB_REPOSITORY/*\//}"
+          GITHUB_ORG="${GITHUB_REPOSITORY_OWNER}"
+          PROJECT_DEPENDENCY="${{ github.event.repository.name }}"
         
           for PROJECT_TENANT_MAP in ${TENANT_ENVIRONMENTS}; do
             PROJECT_TENANT_MAP="${PROJECT_TENANT_MAP/=/ }"
