@@ -207,6 +207,33 @@ runs:
           push_tag
         fi
         
+        function update_project_dependencies() {
+          if [[ -z "${TENANT_ENVIRONMENTS}" ]]; then
+            echo "Skip project update."
+            exit 0
+          fi
+        
+          GITHUB_ORG="${GITHUB_REPOSITORY_OWNER}"
+          PROJECT_DEPENDENCY="${{ github.event.repository.name }}"
+        
+          for PROJECT_TENANT_MAP in ${TENANT_ENVIRONMENTS}; do
+            PROJECT_TENANT_MAP="${PROJECT_TENANT_MAP/=/ }"
+            PROJECT_TENANT_MAP=(${PROJECT_TENANT_MAP})
+        
+            PROJECT_TENANT="${PROJECT_TENANT_MAP[0]}"
+            PROJECT_TENANT_ENVIRONMENT="${PROJECT_TENANT_MAP[1]}"
+            PROJECT_TENANT_REPOSITORY="${GITHUB_ORG}/${PROJECT_TENANT}.bootstrap.infra"
+        
+            if [[ -z "${PROJECT_TENANT_ENVIRONMENT}" ]]; then
+              PROJECT_TENANT_ENVIRONMENT="develop"
+            fi
+        
+            gh workflow run "${TENANT_WORKFLOW_FILE}" --repo "${PROJECT_TENANT_REPOSITORY}" --ref "${PROJECT_TENANT_ENVIRONMENT}" -f "project_dependency_name=${PROJECT_DEPENDENCY}" -f "project_dependency_version=${ARTIFACT_VERSION}"
+        
+            echo "Updated ${PROJECT_DEPENDENCY} dependency in the ${PROJECT_TENANT_ENVIRONMENT} branch ${PROJECT_TENANT_REPOSITORY} repository to version ${ARTIFACT_VERSION}."
+          done
+        }
+        
         if [[ "${SKIP_RELEASE_ARTIFACT}" == "true" ]]; then
           if [[ -z "${CUSTOM_TENANT_NAME}" ]]; then
             TENANT_NAME_RAW="${GITHUB_REPOSITORY%%.*}"
@@ -220,6 +247,10 @@ runs:
           fi
         
           echo "Skip release artifact to artifacts S3 storage."
+        
+          # update dependency for tenants
+          update_project_dependencies
+        
           exit 0
         fi
         
@@ -314,33 +345,6 @@ runs:
           if [[ "${SLACK_NOTIFICATIONS}" == "true" ]]; then
             notify_slack "${TENANT_NAME}" "${ARTIFACT_VERSION}" "${SLACK_MESSAGE_RELEASE_NOTES_PATH}" "${SLACK_MESSAGE_DETAILS}"
           fi
-        }
-        
-        function update_project_dependencies() {
-          if [[ -z "${TENANT_ENVIRONMENTS}" ]]; then
-            echo "Skip project update."
-            exit 0
-          fi
-
-          GITHUB_ORG="${GITHUB_REPOSITORY_OWNER}"
-          PROJECT_DEPENDENCY="${{ github.event.repository.name }}"
-        
-          for PROJECT_TENANT_MAP in ${TENANT_ENVIRONMENTS}; do
-            PROJECT_TENANT_MAP="${PROJECT_TENANT_MAP/=/ }"
-            PROJECT_TENANT_MAP=(${PROJECT_TENANT_MAP})
-        
-            PROJECT_TENANT="${PROJECT_TENANT_MAP[0]}"
-            PROJECT_TENANT_ENVIRONMENT="${PROJECT_TENANT_MAP[1]}"
-            PROJECT_TENANT_REPOSITORY="${GITHUB_ORG}/${PROJECT_TENANT}.bootstrap.infra"
-        
-            if [[ -z "${PROJECT_TENANT_ENVIRONMENT}" ]]; then
-              PROJECT_TENANT_ENVIRONMENT="develop"
-            fi
-        
-            gh workflow run "${TENANT_WORKFLOW_FILE}" --repo "${PROJECT_TENANT_REPOSITORY}" --ref "${PROJECT_TENANT_ENVIRONMENT}" -f "project_dependency_name=${PROJECT_DEPENDENCY}" -f "project_dependency_version=${ARTIFACT_VERSION}"
-        
-            echo "Updated ${PROJECT_DEPENDENCY} dependency in the ${PROJECT_TENANT_ENVIRONMENT} branch ${PROJECT_TENANT_REPOSITORY} repository to version ${ARTIFACT_VERSION}."
-          done
         }
         
         # download all rmk dependencies by version.yaml
