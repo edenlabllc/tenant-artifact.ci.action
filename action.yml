@@ -93,6 +93,7 @@ runs:
         set -e
         
         export GITHUB_TOKEN='${{ inputs.github_token_repo_full_access }}'
+        export RMK_GITHUB_TOKEN='${{ inputs.github_token_repo_full_access }}'
         export AWS_REGION='${{ inputs.core_aws_region }}'
         export AWS_ACCESS_KEY_ID='${{ inputs.core_aws_access_key_id }}'
         export AWS_SECRET_ACCESS_KEY='${{ inputs.core_aws_secret_key }}'
