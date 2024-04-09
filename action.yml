@@ -102,6 +102,7 @@ runs:
         export SKIP_RELEASE_ARTIFACT='${{ inputs.skip_release_artifact }}'
         export TENANT_ENVIRONMENTS='${{ inputs.tenant_environments }}'
         export TENANT_WORKFLOW_FILE='${{ inputs.tenant_workflow_file }}'
+        export INCLUDE_PATHS=(${{ inputs.include_paths }})
         
         readonly AUTOTAG='${{ inputs.autotag }}'
         readonly PUSH_TAG='${{ inputs.push_tag }}'
@@ -112,7 +113,6 @@ runs:
         readonly SLACK_MESSAGE_DETAILS='${{ inputs.slack_message_details }}'
         readonly INPUT_RMK_VERSION='${{ inputs.rmk_version }}'
         readonly CUSTOM_TENANT_NAME='${{ inputs.custom_tenant_name }}'
-        readonly INCLUDE_PATHS=(${{ inputs.include_paths }})
         readonly DIST_DIR="dist"
         readonly DIST_TMP_DIR="${DIST_DIR}/tmp"
         readonly DIST_ARCHIVE_DIR="${DIST_DIR}/archive"
