@@ -27,9 +27,13 @@ inputs:
     required: false
     default: false
   rmk_version:
-    description: rmk version.
+    description: RMK version.
     required: false
     default: latest
+  rmk_version_prev_major:
+    description: Previous major RMK version for BC.
+    required: false
+    default: v3.4.0
   rmk_release_skip_context_switch:
     description: Skip context switch for not provisioned cluster.
     required: false
@@ -112,6 +116,7 @@ runs:
         readonly SLACK_MESSAGE_RELEASE_NOTES_PATH='${{ inputs.slack_message_release_notes_path }}'
         readonly SLACK_MESSAGE_DETAILS='${{ inputs.slack_message_details }}'
         readonly INPUT_RMK_VERSION='${{ inputs.rmk_version }}'
+        readonly INPUT_RMK_VERSION_PREV_MAJOR='${{ inputs.rmk_version_prev_major }}'
         readonly CUSTOM_TENANT_NAME='${{ inputs.custom_tenant_name }}'
         readonly DIST_DIR="dist"
         readonly DIST_TMP_DIR="${DIST_DIR}/tmp"
@@ -267,19 +272,21 @@ runs:
           # needed for backward compatible between different RMK versions
           if [[ "${RMK_VERSION}" =~ ^v4+\.[0-9]+\.[0-9]+(-rc)?$ ]]; then
             if [[ -z "${INCLUDE_PATHS}" ]]; then
-              INCLUDE_PATHS=".PROJECT docs etc helmfile.yaml* project.yaml README.md"
+              INCLUDE_PATHS=".PROJECT .deps .helmfile docs etc helmfile.yaml* project.yaml README.md version.yaml"
             fi
-            mkdir -p .PROJECT/sops-age-keys
-            touch .PROJECT/sops-age-keys/.keys.txt
+
+            rmk release list 1> /dev/null
+            rmk update --version "${INPUT_RMK_VERSION_PREV_MAJOR}"
+            rmk release list 1> /dev/null
           else
             if [[ -z "${INCLUDE_PATHS}" ]]; then
               INCLUDE_PATHS=".deps .helmfile docs etc helmfile.yaml* README.md version.yaml"
             fi
+        
             mkdir -p sops-age-keys
             touch sops-age-keys/.keys.txt
+            rmk release list 1> /dev/null
           fi
-          
-          rmk release list 1> /dev/null
         }
         
         function create_dir() {
@@ -348,7 +355,7 @@ runs:
           fi
         }
         
-        # download all rmk dependencies by version.yaml
+        # download all RMK dependencies by version.yaml
         rmk_get_dependencies
         # create DIST dir for artifact
         create_dir
