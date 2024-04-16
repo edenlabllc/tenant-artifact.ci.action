@@ -362,7 +362,7 @@ runs:
           fi
         }
         
-        # download all RMK dependencies by version.yaml
+        # download all RMK dependencies by version.yaml and project.yaml
         rmk_get_dependencies
         # create DIST dir for artifact
         create_dir
