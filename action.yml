@@ -3,7 +3,7 @@ description: Create and upload tenant Artifact to S3 specific bucket by semver.
 
 inputs:
   artifact_version:
-    description: Artifact release version, mandatory in semver mode.
+    description: Artifact release version, mandatory in SemVer2 mode.
     required: false
   autotag:
     description: Enable auto tagging when merging into target branch.
@@ -19,7 +19,7 @@ inputs:
     description: AWS secret access key of the AWS account storing artifact in S3.
     required: true
   custom_tenant_name:
-    description: Custom Tenant name for different client repo.
+    description: Custom tenant name for different client repo.
     required: false
   github_token_repo_full_access:
     description: GitHub token with full access permissions to repositories.
