@@ -283,7 +283,7 @@ runs:
         
             rmk config init --progress-bar=false
 
-            rmk release list 1> /dev/null
+            rmk release list --scs 1> /dev/null
             rmk update --version "${INPUT_RMK_VERSION_PREV_MAJOR}"
             rmk release list 1> /dev/null
           else
