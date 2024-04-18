@@ -275,13 +275,13 @@ runs:
         echo "RMK version ${RMK_VERSION}"
         
         function rmk_get_dependencies() {
-          rmk config init --progress-bar=false --sops-age-keys-download=false
-        
           # needed for backward compatible between different RMK versions
           if [[ "${RMK_VERSION}" =~ ^v4+\.[0-9]+\.[0-9]+(-rc)?$ ]]; then
             if [[ -z "${INCLUDE_PATHS}" ]]; then
               INCLUDE_PATHS=".PROJECT .deps .helmfile docs etc helmfile.yaml* project.yaml README.md version.yaml"
             fi
+        
+            rmk config init --progress-bar=false
 
             rmk release list 1> /dev/null
             rmk update --version "${INPUT_RMK_VERSION_PREV_MAJOR}"
@@ -290,6 +290,8 @@ runs:
             if [[ -z "${INCLUDE_PATHS}" ]]; then
               INCLUDE_PATHS=".deps .helmfile docs etc helmfile.yaml* README.md version.yaml"
             fi
+        
+            rmk config init --progress-bar=false --sops-age-keys-download=false
         
             mkdir -p sops-age-keys
             touch sops-age-keys/.keys.txt
