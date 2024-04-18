@@ -363,6 +363,8 @@ runs:
           if [[ "${SLACK_NOTIFICATIONS}" == "true" ]]; then
             notify_slack "${TENANT_NAME}" "${ARTIFACT_VERSION}" "${SLACK_MESSAGE_RELEASE_NOTES_PATH}" "${SLACK_MESSAGE_DETAILS}"
           fi
+        
+          echo "\n"
         }
         
         # download all RMK dependencies by version.yaml and project.yaml
