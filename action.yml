@@ -170,8 +170,8 @@ runs:
             gh release create "${ARTIFACT_VERSION}" \
               --title "Artifact version - ${ARTIFACT_VERSION}" \
               --target "${GITHUB_SHA}" \
-              --notes 'All dependency versions for the artifact version: `'"${ARTIFACT_VERSION}"'` are described in the asset file: `version.yaml`' \
-              version.yaml
+              --notes 'All dependency versions for the artifact version: `'"${ARTIFACT_VERSION}"'` are described in the asset file: `project.yaml`' \
+              project.yaml
           fi
         }
         
