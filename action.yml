@@ -25,13 +25,6 @@ inputs:
     description: GitHub token with full access permissions to repositories.
     required: true
     default: ""
-  include_paths:
-    description: |
-      List of files and directories that will be included in the distribution archive.
-      Example:
-      include_paths: .PROJECT docs etc helmfile.yaml* project.yaml README.md
-    required: false
-    default: ""
   push_tag:
     description: Manual push a tag from the current branch.
     required: false
@@ -40,22 +33,10 @@ inputs:
     description: RMK version.
     required: false
     default: latest
-  rmk_version_prev_major:
-    description: Previous major RMK version for BC.
-    required: false
-    default: v3.4.0
   rmk_release_skip_context_switch:
     description: Skip context switch for not provisioned cluster.
     required: false
     default: true
-  skip_generate_certs_linkerd:
-    description: Skip generate certs linkerd for not provisioned cluster.
-    required: false
-    default: true
-  skip_release_artifact:
-    description: Skip release artifact to artifacts S3 storage.
-    required: false
-    default: false
   slack_notifications:
     description: Enable Slack notifications.
     required: false
@@ -93,287 +74,33 @@ inputs:
 runs:
   using: composite
   steps:
-    - run: |
-        set -e
-        
-        export GITHUB_TOKEN='${{ inputs.github_token_repo_full_access }}'
-        export RMK_GITHUB_TOKEN='${{ inputs.github_token_repo_full_access }}'
-        export AWS_REGION='${{ inputs.core_aws_region }}'
-        export AWS_ACCESS_KEY_ID='${{ inputs.core_aws_access_key_id }}'
-        export AWS_SECRET_ACCESS_KEY='${{ inputs.core_aws_secret_key }}'
-        export RMK_RELEASE_SKIP_CONTEXT_SWITCH='${{ inputs.rmk_release_skip_context_switch }}'
-        export SKIP_GENERATE_CERTS_LINKERD='${{ inputs.skip_generate_certs_linkerd }}'
-        export SKIP_RELEASE_ARTIFACT='${{ inputs.skip_release_artifact }}'
-        export UPDATE_TENANT_ENVIRONMENTS='${{ inputs.update_tenant_environments }}'
-        export UPDATE_TENANT_WORKFLOW_FILE='${{ inputs.update_tenant_workflow_file }}'
-        export INCLUDE_PATHS=(${{ inputs.include_paths }})
-        
-        readonly AUTOTAG='${{ inputs.autotag }}'
-        readonly PUSH_TAG='${{ inputs.push_tag }}'
-        readonly SLACK_NOTIFICATIONS='${{ inputs.slack_notifications }}'
-        
-        readonly SLACK_WEBHOOK='${{ inputs.slack_webhook }}'
-        readonly SLACK_MESSAGE_RELEASE_NOTES_PATH='${{ inputs.slack_message_release_notes_path }}'
-        readonly SLACK_MESSAGE_DETAILS='${{ inputs.slack_message_details }}'
-        readonly INPUT_RMK_VERSION='${{ inputs.rmk_version }}'
-        readonly INPUT_RMK_VERSION_PREV_MAJOR='${{ inputs.rmk_version_prev_major }}'
-        readonly CUSTOM_TENANT_NAME='${{ inputs.custom_tenant_name }}'
-        readonly DIST_DIR="dist"
-        readonly DIST_TMP_DIR="${DIST_DIR}/tmp"
-        readonly DIST_ARCHIVE_DIR="${DIST_DIR}/archive"
-        readonly DIST_EXCLUDE_FILES="${DIST_DIR}/exclude_files"
-        
-        ARTIFACT_VERSION='${{ inputs.artifact_version }}'
-        
-        function notify_slack() {
-          local TENANT_NAME="${1}"
-          local TAG="${2}"
-          local RELEASE_NOTES_PATH="${3}"
-          local DETAILS="${4}"
-          local ICON_EMOJI=":package:"
-        
-          if [[ "${SKIP_RELEASE_ARTIFACT}" == "true" ]]; then
-            ARTIFACT_PUBLISHED=false
-          else
-            ARTIFACT_PUBLISHED=true
-          fi
-        
-          if [[ -n "${DETAILS}" ]]; then
-            DETAILS_TEXT="*Details*: ${DETAILS}"
-          fi
-        
-          RELEASE_NOTES_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/blob/${TAG}/${RELEASE_NOTES_PATH}"
-        
-          DATA='{"username":"Tenant artifact action","icon_emoji":"'"${ICON_EMOJI}"'","text":
-            "*Released a new version of '"${TENANT_NAME}"'*: <'"${GITHUB_SERVER_URL}"'/'"${GITHUB_REPOSITORY}"'/tree/'"${TAG}"'|'"${TAG}"'>\n
-            *Release notes*: '"${RELEASE_NOTES_URL}"'\n
-            *Artifact published*: '"${ARTIFACT_PUBLISHED}"'\n
-            '"${DETAILS_TEXT}"'"}'
-        
-          curl -s -X POST -H "Content-Type: application/json" --data "${DATA}" "${SLACK_WEBHOOK}"
-        }
-        
-        function push_tag() {
-          echo "Configure Git user.name and user.email."
-          git config user.name github-actions
-          git config user.email github-actions@github.com
-        
-          echo "Add Git tag ${ARTIFACT_VERSION}."
-          git tag -a "${ARTIFACT_VERSION}" -m "Release ${ARTIFACT_VERSION}"
-          git push origin "${ARTIFACT_VERSION}"
-        
-          if (gh release view "${ARTIFACT_VERSION}" &> /dev/null); then
-            echo "GitHub release ${ARTIFACT_VERSION} already exists."
-            echo "Skipped."
-          else
-            echo "Create GitHub release ${ARTIFACT_VERSION}."
-            gh release create "${ARTIFACT_VERSION}" \
-              --title "Artifact version - ${ARTIFACT_VERSION}" \
-              --target "${GITHUB_SHA}" \
-              --notes 'All dependency versions for the artifact version: `'"${ARTIFACT_VERSION}"'` are described in the asset file: `project.yaml`' \
-              project.yaml
-          fi
-        }
-        
-        function autotag() {
-          GITHUB_ORG="${GITHUB_REPOSITORY%%/*}"
-          
-          if ! [[ "${GITHUB_REF}" =~ refs/heads/(staging|production) ]]; then
-            >&2 echo "Only pushes to staging and production branches are supported. Check the workflow's on.push.* section."
-            exit 1
-          fi
-        
-          GIT_BRANCH="${GITHUB_REF#refs/heads/}"
-        
-          echo "Git commit message: $(git log -1 --pretty=format:"%s")"
-          GIT_COMMIT_MSG="$(git log -1 --pretty=format:"%s")"
+    - name: Install python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.10"
 
-          if [[ ! "${GIT_COMMIT_MSG}" =~ ^Merge\ pull\ request\ #[0-9]+\ from\ ${GITHUB_ORG}/release/(v[0-9]+\.[0-9]+\.[0-9]+(-rc)?)$ ]]; then
-            >&2 echo "Pushes to ${GIT_BRANCH} should be done via merges of PR requests from release/vN.N.N or release/vN.N.N-rc branches only."
-            >&2 echo "The expected message format (will be used for parsing a release tag):"
-            >&2 echo "Merge pull request #N from ${GITHUB_ORG}/release/vN.N.N or ${GITHUB_ORG}/release/vN.N.N-rc"
-            exit 1
-          fi
-
-          ARTIFACT_VERSION="${BASH_REMATCH[1]}"
-              
-          push_tag
-        }
-        
-        if [[ "${SLACK_NOTIFICATIONS}" == "true" ]]; then
-          if [[ -z "${SLACK_WEBHOOK}" || -z "${SLACK_MESSAGE_RELEASE_NOTES_PATH}" ]]; then
-            >&2 echo "Both slack_webhook, slack_message_release_notes_path options required when slack_notifications=true."
-            exit 1
-          fi
-        fi
-        
-        if [[ "${AUTOTAG}" == "true" ]]; then
-          autotag
-        fi
-        
-        if [[ -z "${ARTIFACT_VERSION}" ]]; then
-          >&2 echo "Failed to get artifact version from branch name or input parameter."
-          exit 1
-        fi
-        
-        if [[ "${PUSH_TAG}" == "true" ]]; then
-          push_tag
-        fi
-        
-        function update_tenant_environments() {
-          if [[ -z "${UPDATE_TENANT_ENVIRONMENTS}" || "${GITHUB_REF_NAME}" != "production" ]]; then
-            echo "Skip tenant environments update."
-            return 0
-          fi
-        
-          GITHUB_ORG="${GITHUB_REPOSITORY_OWNER}"
-          PROJECT_DEPENDENCY="${{ github.event.repository.name }}"
-        
-          for UPDATE_TENANT_MAP in ${UPDATE_TENANT_ENVIRONMENTS}; do
-            UPDATE_TENANT_MAP="${UPDATE_TENANT_MAP/=/ }"
-            UPDATE_TENANT_MAP=(${UPDATE_TENANT_MAP})
-        
-            UPDATE_TENANT="${UPDATE_TENANT_MAP[0]}"
-            UPDATE_TENANT_ENVIRONMENT="${UPDATE_TENANT_MAP[1]}"
-            UPDATE_TENANT_REPOSITORY="${GITHUB_ORG}/${UPDATE_TENANT}.bootstrap.infra"
-        
-            if [[ -z "${UPDATE_TENANT_ENVIRONMENT}" ]]; then
-              >&2 echo "No value specified for map tenant1=env1 in update_tenant_environments input parameter."
-              exit 1
-            fi
-        
-            gh workflow run "${UPDATE_TENANT_WORKFLOW_FILE}" --repo "${UPDATE_TENANT_REPOSITORY}" --ref "${UPDATE_TENANT_ENVIRONMENT}" -f "project_dependency_name=${PROJECT_DEPENDENCY}" -f "project_dependency_version=${ARTIFACT_VERSION}"
-        
-            echo "Updated ${PROJECT_DEPENDENCY} dependency in the ${UPDATE_TENANT_ENVIRONMENT} branch ${UPDATE_TENANT_REPOSITORY} repository to version ${ARTIFACT_VERSION}."
-          done
-        }
-        
-        if [[ "${SKIP_RELEASE_ARTIFACT}" == "true" ]]; then
-          if [[ -z "${CUSTOM_TENANT_NAME}" ]]; then
-            TENANT_NAME_RAW="${GITHUB_REPOSITORY%%.*}"
-            TENANT_NAME="${TENANT_NAME_RAW/*\//}"
-          else
-            TENANT_NAME="${CUSTOM_TENANT_NAME}"
-          fi
-        
-          if [[ "${SLACK_NOTIFICATIONS}" == "true" ]]; then
-            notify_slack "${TENANT_NAME}" "${ARTIFACT_VERSION}" "${SLACK_MESSAGE_RELEASE_NOTES_PATH}" "${SLACK_MESSAGE_DETAILS}"
-          fi
-        
-          echo "Skip release artifact to artifacts S3 storage."
-        
-          # update dependency for tenants environments
-          update_tenant_environments
-        
-          exit 0
-        fi
-        
-        echo
-        echo "Install RMK."
-        curl -sL "https://edenlabllc-rmk-tools-infra.s3.eu-north-1.amazonaws.com/rmk/s3-installer" | bash -s -- "${INPUT_RMK_VERSION}"
-        RMK_VERSION="$(rmk --version | sed -E 's/^.*\s(.*)$/\1/')"
-        echo "RMK version ${RMK_VERSION}"
-        
-        function rmk_get_dependencies() {
-          # needed for backward compatible between different RMK versions
-          if [[ "${RMK_VERSION}" =~ ^v4+\.[0-9]+\.[0-9]+(-rc)?$ ]]; then
-            if [[ -z "${INCLUDE_PATHS}" ]]; then
-              INCLUDE_PATHS=".PROJECT .deps .helmfile docs etc helmfile.yaml* project.yaml README.md version.yaml"
-            fi
-        
-            rmk config init --progress-bar=false
-
-            rmk release list --skip-context-switch 1> /dev/null
-            rmk update --version "${INPUT_RMK_VERSION_PREV_MAJOR}"
-            rmk release --skip-context-switch -- list 1> /dev/null
-          else
-            if [[ -z "${INCLUDE_PATHS}" ]]; then
-              INCLUDE_PATHS=".deps .helmfile docs etc helmfile.yaml* README.md version.yaml"
-            fi
-        
-            rmk config init --progress-bar=false --sops-age-keys-download=false
-        
-            mkdir -p sops-age-keys
-            touch sops-age-keys/.keys.txt
-            rmk release --skip-context-switch -- list 1> /dev/null
-          fi
-        }
-        
-        function create_dir() {
-          rm -rf "${DIST_DIR}"
-          mkdir -p "${DIST_TMP_DIR}"
-          mkdir -p "${DIST_ARCHIVE_DIR}"
-          echo "Created ${DIST_DIR} dirs."
-        }
-        
-        function prepare_gitignore() {
-          cat <<EOF > "${DIST_TMP_DIR}"/.gitignore
-        .DS_Store
-        .idea/
-        .env
-        **.dec
-        sops-age-keys/
-        dist/
-        EOF
-          echo "Prepare .gitignore file for new artifact."
-        }
-        
-        function prepare_exclude_files() {
-          if ! (ls etc/*/*/secrets/*.yaml); then
-            touch "${DIST_EXCLUDE_FILES}"
-            return 0
-          fi
-        
-          ls etc/*/*/secrets/*.yaml > "${DIST_EXCLUDE_FILES}"
-        }
-        
-        function get_include_path() {
-          ARCHIVE_LIST=""
-          for ITEM in ${INCLUDE_PATHS[*]}; do
-            if [[ -d "${ITEM}" ]]; then
-              if [[ "${ITEM}" =~ ^.*/$ ]]; then
-                ARCHIVE_LIST="${ARCHIVE_LIST}${ITEM} "
-              else
-                ARCHIVE_LIST="${ARCHIVE_LIST}${ITEM}/ "
-              fi
-            elif [[ -f "${ITEM}" ]]; then
-              ARCHIVE_LIST="${ARCHIVE_LIST}${ITEM} "
-            fi
-          done
-        
-          echo "${ARCHIVE_LIST}"
-        }
-        
-        function upload_artifact() {
-          if [[ -z "${CUSTOM_TENANT_NAME}" ]]; then
-            TENANT_NAME="$(rmk config view | tail +2 | yq '.tenant')"
-          else
-            TENANT_NAME="${CUSTOM_TENANT_NAME}"
-          fi
-        
-          local BUCKET_NAME="edenlabllc-${TENANT_NAME}-artifacts-infra"
-          tar --version 
-          tar --exclude '*.git' --exclude-from "${DIST_EXCLUDE_FILES}" \
-          -zcvf "${DIST_ARCHIVE_DIR}/${TENANT_NAME}-${ARTIFACT_VERSION}".tar.gz $(get_include_path) \
-          -C "${DIST_TMP_DIR}"/ .
-          echo "Create artifact with version ${ARTIFACT_VERSION} by path ${DIST_ARCHIVE_DIR}."
-          echo "Start upload on s3 bucket: ${BUCKET_NAME}."
-          aws s3 sync "${DIST_ARCHIVE_DIR}" s3://"${BUCKET_NAME}"/"${ARTIFACT_VERSION}" --delete
-        
-          if [[ "${SLACK_NOTIFICATIONS}" == "true" ]]; then
-            notify_slack "${TENANT_NAME}" "${ARTIFACT_VERSION}" "${SLACK_MESSAGE_RELEASE_NOTES_PATH}" "${SLACK_MESSAGE_DETAILS}"
-          fi
-        
-          echo ""
-        }
-        
-        # download all RMK dependencies by version.yaml and project.yaml
-        rmk_get_dependencies
-        # create DIST dir for artifact
-        create_dir
-        prepare_gitignore
-        prepare_exclude_files
-        upload_artifact
-        # update dependency for tenants
-        update_tenant_environments
+    - name: Install python dependencies
+      run: pip install -r .github/actions/tenant-artifact.ci.action/requirements.txt
       shell: bash
+
+    - name: Execute main script
+      id: main
+      run: python .github/actions/tenant-artifact.ci.action/main.py
+      shell: bash
+      env:
+        INPUT_ARTIFACT_VERSION: ${{ inputs.artifact_version }}
+        INPUT_AUTOTAG: ${{ inputs.autotag }}
+        INPUT_CORE_AWS_REGION: ${{ inputs.core_aws_region }}
+        INPUT_CORE_AWS_ACCESS_KEY_ID: ${{ inputs.core_aws_access_key_id }}
+        INPUT_CORE_AWS_SECRET_KEY: ${{ inputs.core_aws_secret_key }}
+        INPUT_CUSTOM_TENANT_NAME: ${{ inputs.custom_tenant_name }}
+        INPUT_GITHUB_TOKEN_REPO_FULL_ACCESS: ${{ inputs.github_token_repo_full_access }}
+        INPUT_PUSH_TAG: ${{ inputs.push_tag }}
+        INPUT_RMK_VERSION: ${{ inputs.rmk_version }}
+        INPUT_RMK_RELEASE_SKIP_CONTEXT_SWITCH: ${{ inputs.rmk_release_skip_context_switch }}
+        INPUT_SLACK_NOTIFICATIONS: ${{ inputs.slack_notifications }}
+        INPUT_SLACK_WEBHOOK: ${{ inputs.slack_webhook }}
+        INPUT_SLACK_MESSAGE_RELEASE_NOTES_PATH: ${{ inputs.slack_message_release_notes_path }}
+        INPUT_SLACK_MESSAGE_DETAILS: ${{ inputs.slack_message_details }}
+        INPUT_UPDATE_TENANT_ENVIRONMENTS: ${{ inputs.update_tenant_environments }}
+        INPUT_UPDATE_TENANT_WORKFLOW_FILE: ${{ inputs.update_tenant_workflow_file }}
