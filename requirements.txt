@@ -2,3 +2,4 @@ Jinja2~=3.1.2
 requests~=2.32.3
 GitPython~=3.1.44
 PyGithub~=2.5.0
+slack_sdk~=3.34.0

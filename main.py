@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 
 import os
 import sys
@@ -8,13 +8,13 @@ import subprocess
 
 from git import Repo, InvalidGitRepositoryError, GitCommandError
 from github import Github, Repository, GithubException
+from slack_sdk.webhook import WebhookClient
 
 def run_command(cmd: list | str, *, shell: bool = False) -> None:
     print("Running:", cmd)
     subprocess.run(cmd, check=True, shell=shell, text=True)
 
 def notify_slack(slack_webhook: str, tenant_name: str, tag: str, release_notes_path: str, details: str) -> None:
-    icon_emoji = ":package:"
     details_text = f"*Details*: {details}" if details else ""
     github_server_url = os.environ.get('GITHUB_SERVER_URL', "https://github.com")
     github_repository = os.environ.get('GITHUB_REPOSITORY')
@@ -26,17 +26,11 @@ def notify_slack(slack_webhook: str, tenant_name: str, tag: str, release_notes_p
         f"{details_text}"
     )
 
-    data = {
-        "username": "Tenant artifact action",
-        "icon_emoji": icon_emoji,
-        "text": message
-    }
-    try:
-        response = requests.post(slack_webhook, json=data)
-        response.raise_for_status()
-    except Exception as e:
-        print(f"Error sending notification in Slack: {e}", file=sys.stderr)
-        sys.exit(1)
+    webhook = WebhookClient(url=slack_webhook)
+    response = webhook.send(text=message)
+
+    if response.status_code != 200:
+        raise Exception(f"Ошибка отправки сообщения: {response.status_code}, {response.body}")
 
 def push_tag(repo: Repo, artifact_version: str) -> None:
     try:
@@ -212,47 +206,50 @@ github_sha = os.environ.get('GITHUB_SHA')
 github_org = github_repository.split("/")[0]
 git_branch = github_ref.removeprefix("refs/heads/")
 
-# main
-if not custom_tenant_name:
-    tenant_name = github_repository.split("/")[1]
-    tenant_name = tenant_name.split(".")[0]
-else:
-    tenant_name = custom_tenant_name
+def main() -> None:
+    if not custom_tenant_name:
+        tenant_name = github_repository.split("/")[1]
+        tenant_name = tenant_name.split(".")[0]
+    else:
+        tenant_name = custom_tenant_name
 
-print(f"Tenant: {tenant_name}")
+    print(f"Tenant: {tenant_name}")
 
-# Git Repo
-try:
-    repo = Repo(".")
-except InvalidGitRepositoryError:
-    print("The specified path is not a git repository.", file=sys.stderr)
-    sys.exit(1)
+    # Git Repo
+    try:
+        repo = Repo(".")
+    except InvalidGitRepositoryError:
+        print("The specified path is not a git repository.", file=sys.stderr)
+        sys.exit(1)
 
-# Github Repo
-g = Github(os.environ.get('GITHUB_TOKEN'))
-try:
-    gh_repo = g.get_repo(os.environ.get('GITHUB_REPOSITORY'))
-except GithubException as e:
-    print(f"Error accessing GitHub repository: {e}", file=sys.stderr)
-    sys.exit(1)
+    # Github Repo
+    g = Github(os.environ.get('GITHUB_TOKEN'))
+    try:
+        gh_repo = g.get_repo(os.environ.get('GITHUB_REPOSITORY'))
+    except GithubException as e:
+        print(f"Error accessing GitHub repository: {e}", file=sys.stderr)
+        sys.exit(1)
 
-if autotag:
-    check_pushes_suport(github_org, github_ref)
-    artifact_version = get_artifact_version(repo, github_org, git_branch)
+    if autotag:
+        check_pushes_suport(github_org, github_ref)
+        artifact_version = get_artifact_version(repo, github_org, git_branch)
 
-if not artifact_version:
-    print("Failed to get artifact version from branch name or input parameter.", file=sys.stderr)
-    sys.exit(1)
+    if not artifact_version:
+        print("Failed to get artifact version from branch name or input parameter.", file=sys.stderr)
+        sys.exit(1)
 
-if autotag or push_tag:
-    print(f"artifact_version: {artifact_version}")
-    push_tag(repo, artifact_version)
-    push_release(gh_repo, artifact_version, github_sha)
+    if autotag or push_tag:
+        print(f"artifact_version: {artifact_version}")
+        push_tag(repo, artifact_version)
+        push_release(gh_repo, artifact_version, github_sha)
 
-rmk_install(input_rmk_version)
-rmk_release_list()
+    rmk_install(input_rmk_version)
+    rmk_release_list()
 
-update_tenant(update_tenant_environments, update_tenant_workflow_file, artifact_version)
+    update_tenant(update_tenant_environments, update_tenant_workflow_file, artifact_version)
 
-if slack_notifications:
-    notify_slack(slack_webhook, tenant_name, artifact_version, slack_message_release_notes_path, slack_message_details)
+    if slack_notifications:
+        notify_slack(slack_webhook, tenant_name, artifact_version, slack_message_release_notes_path, slack_message_details)
+
+if __name__ == "__main__":
+    main()
