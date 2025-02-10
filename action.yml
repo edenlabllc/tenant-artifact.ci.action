@@ -9,15 +9,6 @@ inputs:
     description: Enable auto tagging when merging into target branch.
     required: false
     default: false
-  core_aws_region:
-    description: AWS region of the AWS account storing artifact in S3.
-    required: true
-  core_aws_access_key_id:
-    description: AWS access key ID of the AWS account storing artifact in S3.
-    required: true
-  core_aws_secret_key:
-    description: AWS secret access key of the AWS account storing artifact in S3.
-    required: true
   custom_tenant_name:
     description: Custom tenant name for different client repo.
     required: false
@@ -90,9 +81,6 @@ runs:
       env:
         INPUT_ARTIFACT_VERSION: ${{ inputs.artifact_version }}
         INPUT_AUTOTAG: ${{ inputs.autotag }}
-        INPUT_CORE_AWS_REGION: ${{ inputs.core_aws_region }}
-        INPUT_CORE_AWS_ACCESS_KEY_ID: ${{ inputs.core_aws_access_key_id }}
-        INPUT_CORE_AWS_SECRET_KEY: ${{ inputs.core_aws_secret_key }}
         INPUT_CUSTOM_TENANT_NAME: ${{ inputs.custom_tenant_name }}
         INPUT_GITHUB_TOKEN_REPO_FULL_ACCESS: ${{ inputs.github_token_repo_full_access }}
         INPUT_PUSH_TAG: ${{ inputs.push_tag }}

@@ -5,32 +5,37 @@ import sys
 import re
 import requests
 import subprocess
+import argparse
 
 from git import Repo, InvalidGitRepositoryError, GitCommandError
 from github import Github, Repository, GithubException
 from slack_sdk.webhook import WebhookClient
 
-def run_command(cmd: list | str, *, shell: bool = False) -> None:
-    print("Running:", cmd)
-    subprocess.run(cmd, check=True, shell=shell, text=True)
+def notify_slack(slack_webhook: str, tenant_name: str, repository_name: str, tag_name: str, release_notes_path: str, details: str = "") -> None:
+    github_server_url = "https://github.com"
+    repository_url = f"{github_server_url}/{repository_name}"
+    release_ulr = f"{repository_url}/tree/{tag_name}|{tag_name}"
+    release_notes_url = f"{repository_url}/blob/{tag_name}/{release_notes_path}"
 
-def notify_slack(slack_webhook: str, tenant_name: str, tag: str, release_notes_path: str, details: str) -> None:
     details_text = f"*Details*: {details}" if details else ""
-    github_server_url = os.environ.get('GITHUB_SERVER_URL', "https://github.com")
-    github_repository = os.environ.get('GITHUB_REPOSITORY')
-    release_notes_url = f"{github_server_url}/{github_repository}/blob/{tag}/{release_notes_path}"
 
     message = (
-        f"*Released a new version of {tenant_name}*: <{github_server_url}/{github_repository}/tree/{tag}|{tag}>\n"
+        f"*Released a new version of {tenant_name}*: <{release_ulr}>\n"
         f"*Release notes*: {release_notes_url}\n"
         f"{details_text}"
     )
 
+    data = {
+        "username": "Tenant artifact action",
+        "icon_emoji": ":package:",
+        "text": message
+    }
+
     webhook = WebhookClient(url=slack_webhook)
-    response = webhook.send(text=message)
+    response = webhook.send_dict(body=data)
 
     if response.status_code != 200:
-        raise Exception(f"Ошибка отправки сообщения: {response.status_code}, {response.body}")
+        raise Exception(f"Error sending message: {response.status_code}, {response.body}")
 
 def push_tag(repo: Repo, artifact_version: str) -> None:
     try:
@@ -152,61 +157,179 @@ def update_tenant(tenants: set, workflow_file: str, artifact_version: str) -> No
 
 def rmk_install(input_rmk_version: str) -> None:
     print("Install RMK.")
-    curl_cmd = (
-        f'curl -sL "https://edenlabllc-rmk.s3.eu-north-1.amazonaws.com/rmk/s3-installer" '
-        f'| bash -s -- "{input_rmk_version}"'
-    )
-    run_command(curl_cmd, shell=True)
 
     try:
-        rmk_version_output = subprocess.check_output(["rmk", "--version"], text=True).strip()
+        response = requests.get("https://edenlabllc-rmk.s3.eu-north-1.amazonaws.com/rmk/s3-installer")
+        response.raise_for_status()
+    except requests.RequestException as e:
+        print(f"Error downloading RMK installer file: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    script_content = response.text
+
+    try:
+        subprocess.run(
+            ["bash", "-s", "--", input_rmk_version],
+            check=True,
+            text=True,
+            input=script_content)
+    except subprocess.CalledProcessError as e:
+        print(f"Error instaling RMK: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        rmk_version_output = subprocess.check_output(["rmk", "--version"], encoding='UTF-8').strip()
+        print(rmk_version_output)
         m = re.search(r'^.*\s(.*)$', rmk_version_output)
         rmk_version = m.group(1) if m else rmk_version_output
-    except subprocess.CalledProcessError:
-        print("Error getting RMK version.", file=sys.stderr)
+    except subprocess.CalledProcessError as e:
+        print(f"Error getting RMK version: {e}", file=sys.stderr)
         sys.exit(1)
 
     print(f"RMK version {rmk_version}")
 
-    run_command(["rmk", "config", "init", "--progress-bar=false"])
+    try:
+        subprocess.run(
+            ["rmk", "config", "init", "--progress-bar=false"],
+            check=True,
+            text=True)
+    except subprocess.CalledProcessError as e:
+        print(f"Error getting RMK config init: {e}", file=sys.stderr)
+        sys.exit(1)
 
 def rmk_release_list() -> None:
-    run_command(["rmk", "release", "list", "--skip-context-switch"],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        subprocess.run(
+            ["rmk", "release", "list", "--skip-context-switch"],
+            check=True,
+            text=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL)
+    except subprocess.CalledProcessError as e:
+        print(f"Error getting RMK release list: {e}", file=sys.stderr)
+        sys.exit(1)
 
-# read inputs
-rmk_github_token = os.environ.get('INPUT_GITHUB_TOKEN_REPO_FULL_ACCESS', '')
-os.environ['GITHUB_TOKEN'] = rmk_github_token
-os.environ['RMK_GITHUB_TOKEN'] = rmk_github_token
-os.environ['RMK_RELEASE_SKIP_CONTEXT_SWITCH'] = os.environ.get('INPUT_RMK_RELEASE_SKIP_CONTEXT_SWITCH' ,'true')
+if __name__ == "__main__":
+    class EnvDefault(argparse.Action):
+        def __init__(self, envvar, required=True, default=None, **kwargs):
+            if envvar:
+                if envvar in os.environ:
+                    default = os.environ.get(envvar, default)
+            if required and default:
+                required = False
+            super(EnvDefault, self).__init__(default=default, required=required, **kwargs)
 
-os.environ['AWS_REGION'] = os.environ.get('INPUT_CORE_AWS_REGION', '')
-os.environ['AWS_ACCESS_KEY_ID'] = os.environ.get('INPUT_CORE_AWS_ACCESS_KEY_ID', '')
-os.environ['AWS_SECRET_ACCESS_KEY'] = os.environ.get('INPUT_CORE_AWS_SECRET_KEY', '')
+        def __call__(self, parser, namespace, values, option_string=None):
+            setattr(namespace, self.dest, values)
 
-update_tenant_environments = set(os.environ.get('INPUT_UPDATE_TENANT_ENVIRONMENTS', '').splitlines())
-update_tenant_workflow_file = os.environ.get('INPUT_UPDATE_TENANT_WORKFLOW_FILE')
+    parser=argparse.ArgumentParser()
 
-autotag = os.environ.get('INPUT_AUTOTAG') == 'true'
-push_tag = os.environ.get('INPUT_PUSH_TAG') == 'true'
+    parser.add_argument(
+        "-ute" , "--update_tenant_environments", action=EnvDefault, required=False,
+        envvar="INPUT_UPDATE_TENANT_ENVIRONMENTS", type=str, default='',
+        help="List of tenants and environments for automatically updating the dependency version.")
 
-slack_notifications = os.environ.get('INPUT_SLACK_NOTIFICATIONS') == 'true'
-slack_webhook = os.environ.get('INPUT_SLACK_WEBHOOK')
-slack_message_release_notes_path = os.environ.get('INPUT_SLACK_MESSAGE_RELEASE_NOTES_PATH')
-slack_message_details = os.environ.get('INPUT_SLACK_MESSAGE_DETAILS')
+    parser.add_argument(
+        "-utwf" , "--update_tenant_workflow_file", action=EnvDefault, required=False,
+        envvar="INPUT_UPDATE_TENANT_WORKFLOW_FILE", type=str, default='',
+        help="Tenant workflow file with a 'on.workflow_dispatch' trigger (only if update_tenant_environments is specified).")
 
-input_rmk_version = os.environ.get('INPUT_RMK_VERSION', 'latest')
-custom_tenant_name = os.environ.get('INPUT_CUSTOM_TENANT_NAME')
-artifact_version = os.environ.get('INPUT_ARTIFACT_VERSION')
+    parser.add_argument(
+        "-at" , "--autotag", action=EnvDefault, required=False,
+        envvar="INPUT_AUTOTAG", type=bool, default=False,
+        help="Enable auto tagging when merging into target branch.")
 
-github_repository = os.environ.get('GITHUB_REPOSITORY')
-github_ref = os.environ.get('GITHUB_REF')
-github_sha = os.environ.get('GITHUB_SHA')
+    parser.add_argument(
+        "-pt" , "--push_tag", action=EnvDefault, required=False,
+        envvar="INPUT_PUSH_TAG", type=bool, default=False,
+        help="Custom tenant name for different client repo.")
 
-github_org = github_repository.split("/")[0]
-git_branch = github_ref.removeprefix("refs/heads/")
+    parser.add_argument(
+        "-sn" , "--slack_notifications", action=EnvDefault, required=False,
+        envvar="INPUT_SLACK_NOTIFICATIONS", type=bool, default=False,
+        help="Enable Slack notifications.")
 
-def main() -> None:
+    parser.add_argument(
+        "-sw" , "--slack_webhook", action=EnvDefault, required=False,
+        envvar="INPUT_SLACK_WEBHOOK", type=str, default='',
+        help="URL for Slack webhook (required if --slack_notifications=true).")
+
+    parser.add_argument(
+        "-smrnp" , "--slack_message_release_notes_path", action=EnvDefault, required=False,
+        envvar="INPUT_SLACK_MESSAGE_RELEASE_NOTES_PATH", type=str, default='',
+        help="Path relative to the root of the repository to a file with release notes (required if --slack_notifications=true).")
+
+    parser.add_argument(
+        "-smd" , "--slack_message_details", action=EnvDefault, required=False,
+        envvar="INPUT_SLACK_MESSAGE_DETAILS", type=str, default='',
+        help="Additional information added to the body of the Slack message (only if --slack_notifications=true).")
+
+    parser.add_argument(
+        "-rv" , "--rmk_version", action=EnvDefault, required=False,
+        envvar="INPUT_RMK_VERSION", type=str, default='latest',
+        help="RMK version.")
+
+    parser.add_argument(
+        "-rrscs" , "--rmk_release_skip_context_switch", action=EnvDefault, required=False,
+        envvar="INPUT_RMK_RELEASE_SKIP_CONTEXT_SWITCH", type=bool, default=True,
+        help="Skip context switch for not provisioned cluster.")
+
+    parser.add_argument(
+        "-ctn" , "--custom_tenant_name", action=EnvDefault, required=False,
+        envvar="INPUT_CUSTOM_TENANT_NAME", type=str, default='',
+        help="Custom tenant name for different client repo.")
+
+    parser.add_argument(
+        "-av" , "--artifact_version", action=EnvDefault, required=False,
+        envvar="INPUT_ARTIFACT_VERSION", type=str, default='',
+        help="Artifact release version, mandatory in SemVer2 mode.")
+
+    parser.add_argument(
+        "-ght" , "--github_token", action=EnvDefault, required=True,
+        envvar="INPUT_GITHUB_TOKEN_REPO_FULL_ACCESS", type=str,
+        help="GitHub token with full access permissions to repositories.")
+
+    parser.add_argument(
+        "-grep" , "--github_repository", action=EnvDefault, required=True,
+        envvar="GITHUB_REPOSITORY", type=str,
+        help="The owner and repository name.")
+
+    parser.add_argument(
+        "-gref" , "--github_ref", action=EnvDefault, required=True,
+        envvar="GITHUB_REF", type=str,
+        help="The fully-formed ref of the branch or tag.")
+
+    parser.add_argument(
+        "-gsha" , "--github_sha", action=EnvDefault, required=True,
+        envvar="GITHUB_SHA", type=str,
+        help="The commit SHA that triggered the workflow.")
+
+    args=parser.parse_args()
+
+    rmk_github_token = args.github_token
+    update_tenant_environments = set(args.update_tenant_environments.splitlines())
+    update_tenant_workflow_file = args.update_tenant_workflow_file
+    autotag = args.autotag
+    push_tag = args.push_tag
+    slack_notifications = args.slack_notifications
+    slack_webhook = args.slack_webhook
+    slack_message_release_notes_path = args.slack_message_release_notes_path
+    slack_message_details = args.slack_message_details
+    input_rmk_version = args.rmk_version
+    rmk_release_skip_context_switch = args.rmk_release_skip_context_switch
+    custom_tenant_name = args.custom_tenant_name
+    artifact_version = args.artifact_version
+    github_repository = args.github_repository
+    github_ref = args.github_ref
+    github_sha = args.github_sha
+
+    os.environ['GITHUB_TOKEN'] = rmk_github_token
+    os.environ['RMK_GITHUB_TOKEN'] = rmk_github_token
+    os.environ['RMK_RELEASE_SKIP_CONTEXT_SWITCH'] = "true" if rmk_release_skip_context_switch else "false"
+
+    github_org = github_repository.split("/")[0]
+    git_branch = github_ref.removeprefix("refs/heads/")
+
     if not custom_tenant_name:
         tenant_name = github_repository.split("/")[1]
         tenant_name = tenant_name.split(".")[0]
@@ -249,7 +372,4 @@ def main() -> None:
     update_tenant(update_tenant_environments, update_tenant_workflow_file, artifact_version)
 
     if slack_notifications:
-        notify_slack(slack_webhook, tenant_name, artifact_version, slack_message_release_notes_path, slack_message_details)
-
-if __name__ == "__main__":
-    main()
+        notify_slack(slack_webhook, tenant_name, github_repository, artifact_version, slack_message_release_notes_path, slack_message_details)
