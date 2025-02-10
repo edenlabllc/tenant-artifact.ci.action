@@ -24,10 +24,6 @@ inputs:
     description: RMK version.
     required: false
     default: latest
-  rmk_release_skip_context_switch:
-    description: Skip context switch for not provisioned cluster.
-    required: false
-    default: true
   slack_notifications:
     description: Enable Slack notifications.
     required: false
@@ -85,7 +81,6 @@ runs:
         INPUT_GITHUB_TOKEN_REPO_FULL_ACCESS: ${{ inputs.github_token_repo_full_access }}
         INPUT_PUSH_TAG: ${{ inputs.push_tag }}
         INPUT_RMK_VERSION: ${{ inputs.rmk_version }}
-        INPUT_RMK_RELEASE_SKIP_CONTEXT_SWITCH: ${{ inputs.rmk_release_skip_context_switch }}
         INPUT_SLACK_NOTIFICATIONS: ${{ inputs.slack_notifications }}
         INPUT_SLACK_WEBHOOK: ${{ inputs.slack_webhook }}
         INPUT_SLACK_MESSAGE_RELEASE_NOTES_PATH: ${{ inputs.slack_message_release_notes_path }}
