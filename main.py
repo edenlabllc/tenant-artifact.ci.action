@@ -231,7 +231,6 @@ def rmk_install(input_rmk_version: str):
 
     try:
         rmk_version_output = subprocess.check_output(["rmk", "--version"], encoding='UTF-8').strip()
-        print(rmk_version_output)
         reg_match = re.search(r'^.*\s(.*)$', rmk_version_output)
         rmk_version = reg_match.group(1) if reg_match else rmk_version_output
     except subprocess.CalledProcessError as err:
@@ -365,8 +364,9 @@ if __name__ == "__main__":
         if not artifact_version:
             raise Exception("Failed to get artifact version from branch name or input parameter.")
 
+        print(f"Artifact_version: {artifact_version}")
+
         if autotag or push_tag:
-            print(f"artifact_version: {artifact_version}")
             git_push_tag(artifact_version)
             github_push_release(artifact_version, github_sha, github_repository, rmk_github_token)
 
