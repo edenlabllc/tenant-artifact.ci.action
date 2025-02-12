@@ -51,73 +51,68 @@ def git_push_tag(artifact_version: str):
     except InvalidGitRepositoryError:
         raise Exception("The specified path is not a git repository.")
 
-    try:
+    with git_repo:
         print("Configure Git user.name and user.email.")
-        with git_repo.config_writer() as cw:
-            cw.set_value("user", "name", "github-actions")
-            cw.set_value("user", "email", "github-actions@github.com")
-    except Exception as err:
-        git_repo.close()
-        raise Exception(f"Error while setting up Git user: {err}")
+        try:
+            with git_repo.config_writer() as cw:
+                cw.set_value("user", "name", "github-actions")
+                cw.set_value("user", "email", "github-actions@github.com")
+        except Exception as err:
+            raise Exception(f"Error while setting up Git user:\n{err}")
 
-    try:
         print(f"Add Git tag {artifact_version}.")
-        git_repo.create_tag(artifact_version, message=f"Release {artifact_version}")
-    except GitCommandError as err:
-        git_repo.close()
-        raise Exception(f"Error creating tag {artifact_version}: {err}")
+        try:
+            git_repo.create_tag(artifact_version, message=f"Release {artifact_version}")
+        except GitCommandError as err:
+            raise Exception(f"Error creating tag {artifact_version}:\n{err}")
 
-    try:
-        origin = git_repo.remote(name="origin")
-        origin.push(artifact_version)
-        print(f"Tag {artifact_version} successfully sent to origin.")
-    except GitCommandError as err:
-        raise Exception(f"Error sending tag {artifact_version}: {err}")
-    finally:
-        git_repo.close()
+        try:
+            origin = git_repo.remote(name="origin")
+            origin.push(artifact_version)
+            print(f"Tag {artifact_version} successfully sent to origin.")
+        except GitCommandError as err:
+            raise Exception(f"Error sending tag {artifact_version}:\n{err}")
 
 def github_push_release(artifact_version: str, github_sha: str, github_repository:str, github_token:str):
-    gh = Github(github_token)
-    try:
-        gh_repo = gh.get_repo(github_repository)
-    except GithubException as err:
-        if err.status == 401:
-            raise Exception(f"Error accessing GitHub repository.\n"+
-                            f"{err.message}")
-        elif err.status == 404:
-            raise Exception(f"Error accessing GitHub repository.\n"+
-                            f"Repository {github_repository} Not Found.")
-        else:
-            raise Exception(f"Error accessing GitHub repository: {err}")
+    with Github(github_token) as gh:
+        try:
+            gh_repo = gh.get_repo(github_repository)
+        except GithubException as err:
+            if err.status == 401:
+                raise Exception(f"Error accessing GitHub repository.\n"+
+                                f"{err.message}")
+            elif err.status == 404:
+                raise Exception(f"Error accessing GitHub repository.\n"+
+                                f"Repository {github_repository} Not Found.")
+            else:
+                raise Exception(f"Error accessing GitHub repository:\n{err}")
 
-    try:
-        gh_repo.get_release(artifact_version)
-        print(f"GitHub release {artifact_version} already exists.")
-        print("Skipped.")
-    except GithubException as err:
-        if err.status == 404:
-            print(f"Creating a GitHub release {artifact_version}.")
-            try:
-                release = gh_repo.create_git_release(
-                    tag=artifact_version,
-                    name=f"Artifact version - {artifact_version}",
-                    message=f"All dependency versions for the artifact version: `{artifact_version}` are described in the asset file: `project.yaml`",
-                    target_commitish=github_sha,
-                    draft=False,
-                    prerelease=False
-                )
-                asset_path = "project.yaml"
-                if os.path.exists(asset_path):
-                    release.upload_asset(asset_path)
-                    print("The project.yaml file has been successfully uploaded to the release.")
-                else:
-                    print("File project.yaml not found, skipping asset loading.")
-            except GithubException as gh_err:
-                raise Exception(f"Error creating release on GitHub: {gh_err}")
-        else:
-            raise Exception(f"Error checking for release existence: {err}")
-    finally:
-        gh.close()
+        try:
+            gh_repo.get_release(artifact_version)
+            print(f"GitHub release {artifact_version} already exists.")
+            print("Skipped.")
+        except GithubException as err:
+            if err.status == 404:
+                print(f"Creating a GitHub release {artifact_version}.")
+                try:
+                    release = gh_repo.create_git_release(
+                        tag=artifact_version,
+                        name=f"Artifact version - {artifact_version}",
+                        message=f"All dependency versions for the artifact version: `{artifact_version}` are described in the asset file: `project.yaml`",
+                        target_commitish=github_sha,
+                        draft=False,
+                        prerelease=False
+                    )
+                    asset_path = "project.yaml"
+                    if os.path.exists(asset_path):
+                        release.upload_asset(asset_path)
+                        print("The project.yaml file has been successfully uploaded to the release.")
+                    else:
+                        print("File project.yaml not found, skipping asset loading.")
+                except GithubException as gh_err:
+                    raise Exception(f"Error creating release on GitHub:\n{gh_err}")
+            else:
+                raise Exception(f"Error checking for release existence:\n{err}")
 
 def check_pushes_suport(github_org: str, ref: str) -> bool:
     if not github_org:
@@ -135,18 +130,12 @@ def get_artifact_version(github_org: str, github_branch: str):
     except InvalidGitRepositoryError:
         raise Exception("The specified path is not a git repository.")
 
-    try:
+    with git_repo:
         commit = git_repo.head.commit
         commit_subject = commit.message.splitlines()[0]
-    except Exception:
-        raise Exception("Unable to get commit message from a git repository.")
-    finally:
-        git_repo.close()
-
     print(f"Git commit message: {commit_subject}")
 
     pattern = r"^Merge pull request #[0-9]+ from " + re.escape(github_org) + r"/release/(v[0-9]+\.[0-9]+\.[0-9]+(?:-rc)?)$"
-
     regexp_match = re.match(pattern, commit_subject)
     if not regexp_match:
         print(
@@ -168,55 +157,50 @@ def update_tenant(tenants: set, workflow_file: str, artifact_version: str, githu
 
     tenant_repository_sufix = ".bootstrap.infra"
 
-    gh = Github(github_token)
+    with Github(github_token) as gh:
+        for tenant_and_environment in tenants:
+            if len(tenant_and_environment.split("=")) != 2:
+                print(f"Item '{tenant_and_environment}' of the tenants and environments list is not in the correct format.\n"+
+                    "Example: 'tenant=env'\n"+
+                    "Skip this list item.")
+                continue
 
-    for tenant_and_environment in tenants:
-        if len(tenant_and_environment.split("=")) != 2:
-            print(f"Item '{tenant_and_environment}' of the tenants and environments list is not in the correct format.\n"+
-                  "Example: 'tenant=env'\n"+
-                  "Skip this list item.")
-            continue
+            tenant_name = str(tenant_and_environment.split("=")[0]).strip()
+            tenant_environment = str(tenant_and_environment.split("=")[1]).strip()
 
-        tenant_name = str(tenant_and_environment.split("=")[0]).strip()
-        tenant_environment = str(tenant_and_environment.split("=")[1]).strip()
+            if not (tenant_name and tenant_environment):
+                print(f"Item '{tenant_and_environment}' of the tenants and environments list is not in the correct format.\n"+
+                    "Skip this list item.")
+                continue
 
-        if not (tenant_name and tenant_environment):
-            print(f"Item '{tenant_and_environment}' of the tenants and environments list is not in the correct format.\n"+
-                  "Skip this list item.")
-            continue
+            tenant_repository = f"{project_organization}/{tenant_name}{tenant_repository_sufix}"
 
-        tenant_repository = f"{project_organization}/{tenant_name}{tenant_repository_sufix}"
+            try:
+                gh_repo = gh.get_repo(tenant_repository)
+            except GithubException as gh_err:
+                if err.status == 401:
+                    raise Exception(f"Error accessing GitHub repository {tenant_repository}.\n"+
+                                    f"{err.message}")
+                elif err.status == 404:
+                    raise Exception(f"Error accessing GitHub repository {tenant_repository}.\n"+
+                                    f"Repository {github_org}/{github_repository_name} Not Found.")
+                else:
+                    raise Exception(f"Error accessing repository {tenant_repository}:\n{gh_err}")
 
-        try:
-            gh_repo = gh.get_repo(tenant_repository)
-        except GithubException as gh_err:
-            gh.close()
-            if err.status == 401:
-                raise Exception(f"Error accessing GitHub repository {tenant_repository}.\n"+
-                                f"{err.message}")
-            elif err.status == 404:
-                raise Exception(f"Error accessing GitHub repository {tenant_repository}.\n"+
-                                f"Repository {github_org}/{github_repository_name} Not Found.")
-            else:
-                raise Exception(f"Error accessing repository {tenant_repository}: {gh_err}")
-
-        payload = {
-            "ref": tenant_environment,
-            "inputs": {
-                "project_dependency_name": project_dependency,
-                "project_dependency_version": artifact_version,
+            payload = {
+                "ref": tenant_environment,
+                "inputs": {
+                    "project_dependency_name": project_dependency,
+                    "project_dependency_version": artifact_version,
+                }
             }
-        }
 
-        url = f"/repos/{tenant_repository}/actions/workflows/{workflow_file}/dispatches"
-        try:
-            gh_repo._requester.requestJsonAndCheck("POST", url, input=payload)
-            print(f"Updated {project_dependency} dependency in the {tenant_environment} branch of {tenant_name}{tenant_repository_sufix} repository to version {artifact_version}.")
-        except GithubException as gh_err:
-            gh.close()
-            raise Exception(f"Error triggering workflow for repository {tenant_name}{tenant_repository_sufix}: {gh_err}")
-
-    gh.close()
+            url = f"/repos/{tenant_repository}/actions/workflows/{workflow_file}/dispatches"
+            try:
+                gh_repo._requester.requestJsonAndCheck("POST", url, input=payload)
+                print(f"Updated {project_dependency} dependency in the {tenant_environment} branch of {tenant_name}{tenant_repository_sufix} repository to version {artifact_version}.")
+            except GithubException as gh_err:
+                raise Exception(f"Error triggering workflow for repository {tenant_name}{tenant_repository_sufix}:\n{gh_err}")
 
 def rmk_install(input_rmk_version: str):
     print("Install RMK.")
@@ -225,7 +209,7 @@ def rmk_install(input_rmk_version: str):
         response = requests.get("https://edenlabllc-rmk.s3.eu-north-1.amazonaws.com/rmk/s3-installer")
         response.raise_for_status()
     except requests.RequestException as err:
-        raise Exception(f"Error downloading RMK installer file: {err}")
+        raise Exception(f"Error downloading RMK installer file:\n{err}")
 
     script_content = response.text
 
@@ -236,14 +220,14 @@ def rmk_install(input_rmk_version: str):
             text=True,
             input=script_content)
     except subprocess.CalledProcessError as err:
-        raise Exception(f"Error instaling RMK: {err}")
+        raise Exception(f"Error instaling RMK:\n{err}")
 
     try:
         rmk_version_output = subprocess.check_output(["rmk", "--version"], encoding='UTF-8').strip()
         reg_match = re.search(r'^.*\s(.*)$', rmk_version_output)
         rmk_version = reg_match.group(1) if reg_match else rmk_version_output
     except subprocess.CalledProcessError as err:
-        raise Exception(f"Error getting RMK version: {err}")
+        raise Exception(f"Error getting RMK version:\n{err}")
 
     print(f"RMK version {rmk_version}")
 
@@ -253,7 +237,7 @@ def rmk_install(input_rmk_version: str):
             check=True,
             text=True)
     except subprocess.CalledProcessError as err:
-        raise Exception(f"Error getting RMK config init: {err}")
+        raise Exception(f"Error getting RMK config init:\n{err}")
 
 def get_parser_namespace() -> Namespace:
     class EnvDefault(argparse.Action):
