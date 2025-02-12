@@ -45,10 +45,15 @@ def notify_slack(slack_webhook: str, tenant_name: str, repository_name: str, tag
     if response.status_code != 200:
         raise Exception(f"Error sending message: {response.status_code}, {response.body}")
 
-def git_push_tag(repo: Repo, artifact_version: str):
+def git_push_tag(artifact_version: str):
+    try:
+        git_repo = Repo(".")
+    except InvalidGitRepositoryError:
+        raise Exception("The specified path is not a git repository.")
+
     try:
         print("Configure Git user.name and user.email.")
-        with repo.config_writer() as cw:
+        with git_repo.config_writer() as cw:
             cw.set_value("user", "name", "github-actions")
             cw.set_value("user", "email", "github-actions@github.com")
     except Exception as err:
@@ -56,18 +61,33 @@ def git_push_tag(repo: Repo, artifact_version: str):
 
     try:
         print(f"Add Git tag {artifact_version}.")
-        repo.create_tag(artifact_version, message=f"Release {artifact_version}")
+        git_repo.create_tag(artifact_version, message=f"Release {artifact_version}")
     except GitCommandError as err:
         raise Exception(f"Error creating tag {artifact_version}: {err}")
 
     try:
-        origin = repo.remote(name="origin")
+        origin = git_repo.remote(name="origin")
         origin.push(artifact_version)
         print(f"Tag {artifact_version} successfully sent to origin.")
     except GitCommandError as err:
         raise Exception(f"Error sending tag {artifact_version}: {err}")
 
-def github_push_release(gh_repo: Repository, artifact_version: str, github_sha: str):
+    git_repo.close()
+
+def github_push_release(artifact_version: str, github_sha: str, github_repository:str, github_token:str):
+    gh = Github(github_token)
+    try:
+        gh_repo = gh.get_repo(github_repository)
+    except GithubException as err:
+        if err.status == 401:
+            raise Exception(f"Error accessing GitHub repository.\n"+
+                            f"{err.message}")
+        elif err.status == 404:
+            raise Exception(f"Error accessing GitHub repository.\n"+
+                            f"Repository {github_repository} Not Found.")
+        else:
+            raise Exception(f"Error accessing GitHub repository: {err}")
+
     try:
         gh_repo.get_release(artifact_version)
         print(f"GitHub release {artifact_version} already exists.")
@@ -95,6 +115,8 @@ def github_push_release(gh_repo: Repository, artifact_version: str, github_sha: 
         else:
             raise Exception(f"Error checking for release existence: {err}")
 
+    gh.close()
+
 def check_pushes_suport(github_org: str, ref: str) -> bool:
     if not github_org:
         print("GITHUB_REPOSITORY is not set or has an invalid format.", file=sys.stderr)
@@ -105,8 +127,13 @@ def check_pushes_suport(github_org: str, ref: str) -> bool:
     else:
         return True
 
-def get_artifact_version(repo: Repo, github_org: str, github_branch: str):
-    commit = repo.head.commit
+def get_artifact_version(github_org: str, github_branch: str):
+    try:
+        git_repo = Repo(".")
+    except InvalidGitRepositoryError:
+        raise Exception("The specified path is not a git repository.")
+
+    commit = git_repo.head.commit
     commit_subject = commit.message.splitlines()[0]
     print(f"Git commit message: {commit_subject}")
 
@@ -121,6 +148,7 @@ def get_artifact_version(repo: Repo, github_org: str, github_branch: str):
             file=sys.stderr)
         return ""
 
+    git_repo.close()
     return regexp_match.group(1)
 
 def update_tenant(tenants: set, workflow_file: str, artifact_version: str, github_org:str, github_repository_name:str, github_token:str):
@@ -133,7 +161,7 @@ def update_tenant(tenants: set, workflow_file: str, artifact_version: str, githu
 
     tenant_repository_sufix = ".bootstrap.infra"
 
-    gh_update = Github(github_token)
+    gh = Github(github_token)
 
     for tenant_and_environment in tenants:
         if len(tenant_and_environment.split("=")) != 2:
@@ -153,7 +181,7 @@ def update_tenant(tenants: set, workflow_file: str, artifact_version: str, githu
         tenant_repository = f"{project_organization}/{tenant_name}{tenant_repository_sufix}"
 
         try:
-            gh_update_repo = gh_update.get_repo(tenant_repository)
+            gh_repo = gh.get_repo(tenant_repository)
         except GithubException as gh_err:
             if err.status == 401:
                 raise Exception(f"Error accessing GitHub repository {tenant_repository}.\n"+
@@ -174,10 +202,12 @@ def update_tenant(tenants: set, workflow_file: str, artifact_version: str, githu
 
         url = f"/repos/{tenant_repository}/actions/workflows/{workflow_file}/dispatches"
         try:
-            gh_update_repo._requester.requestJsonAndCheck("POST", url, input=payload)
+            gh_repo._requester.requestJsonAndCheck("POST", url, input=payload)
             print(f"Updated {project_dependency} dependency in the {tenant_environment} branch of {tenant_name}{tenant_repository_sufix} repository to version {artifact_version}.")
         except GithubException as gh_err:
             raise Exception(f"Error triggering workflow for repository {tenant_name}{tenant_repository_sufix}: {gh_err}")
+
+    gh.close()
 
 def rmk_install(input_rmk_version: str):
     print("Install RMK.")
@@ -322,47 +352,23 @@ if __name__ == "__main__":
         print(f"Tenant: {tenant_name}")
 
         if input_rmk_version != "latest":
-            if version.parse('v0.45.0')>version.parse(input_rmk_version):
+            if version.parse('v0.45.0-rc')>version.parse(input_rmk_version):
                 raise Exception(f"Version {input_rmk_version} of RMK is not correct.\n"+
                                 "The version for RMK must be at least v0.45.0.")
 
         os.environ['GITHUB_TOKEN'] = rmk_github_token
         os.environ['RMK_GITHUB_TOKEN'] = rmk_github_token
 
-        # Git Repo
-        try:
-            git_repo = Repo(".")
-        except InvalidGitRepositoryError:
-            raise Exception("The specified path is not a git repository.")
-
-        # Github Repo
-        gh = Github(rmk_github_token)
-        try:
-            gh_repo = gh.get_repo(github_repository)
-        except GithubException as err:
-            if err.status == 401:
-                raise Exception(f"Error accessing GitHub repository.\n"+
-                                f"{err.message}")
-            elif err.status == 404:
-                raise Exception(f"Error accessing GitHub repository.\n"+
-                                f"Repository {github_repository} Not Found.")
-            else:
-                raise Exception(f"Error accessing GitHub repository: {err}")
-
-        if autotag or push_tag:
-            if not check_pushes_suport(github_org, github_ref):
-                raise Exception("The Release cannot be made for this branch.")
-
         if autotag:
-            artifact_version = get_artifact_version(git_repo, github_org, github_branch)
+            artifact_version = get_artifact_version(github_org, github_branch)
 
         if not artifact_version:
             raise Exception("Failed to get artifact version from branch name or input parameter.")
 
         if autotag or push_tag:
             print(f"artifact_version: {artifact_version}")
-            git_push_tag(git_repo, artifact_version)
-            github_push_release(gh_repo, artifact_version, github_sha)
+            git_push_tag(artifact_version)
+            github_push_release(artifact_version, github_sha, github_repository, rmk_github_token)
 
         rmk_install(input_rmk_version)
 
