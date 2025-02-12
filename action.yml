@@ -67,12 +67,12 @@ runs:
         python-version: "3.10"
 
     - name: Install python dependencies
-      run: pip install -r .github/actions/tenant-artifact.ci.action/requirements.txt
+      run: pip install -r ${{ github.action_path }}/requirements.txt
       shell: bash
 
     - name: Execute main script
       id: main
-      run: python .github/actions/tenant-artifact.ci.action/main.py
+      run: python ${{ github.action_path }}/main.py
       shell: bash
       env:
         INPUT_ARTIFACT_VERSION: ${{ inputs.artifact_version }}
