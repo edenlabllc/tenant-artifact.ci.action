@@ -57,12 +57,14 @@ def git_push_tag(artifact_version: str):
             cw.set_value("user", "name", "github-actions")
             cw.set_value("user", "email", "github-actions@github.com")
     except Exception as err:
+        git_repo.close()
         raise Exception(f"Error while setting up Git user: {err}")
 
     try:
         print(f"Add Git tag {artifact_version}.")
         git_repo.create_tag(artifact_version, message=f"Release {artifact_version}")
     except GitCommandError as err:
+        git_repo.close()
         raise Exception(f"Error creating tag {artifact_version}: {err}")
 
     try:
@@ -71,8 +73,8 @@ def git_push_tag(artifact_version: str):
         print(f"Tag {artifact_version} successfully sent to origin.")
     except GitCommandError as err:
         raise Exception(f"Error sending tag {artifact_version}: {err}")
-
-    git_repo.close()
+    finally:
+        git_repo.close()
 
 def github_push_release(artifact_version: str, github_sha: str, github_repository:str, github_token:str):
     gh = Github(github_token)
@@ -114,8 +116,8 @@ def github_push_release(artifact_version: str, github_sha: str, github_repositor
                 raise Exception(f"Error creating release on GitHub: {gh_err}")
         else:
             raise Exception(f"Error checking for release existence: {err}")
-
-    gh.close()
+    finally:
+        gh.close()
 
 def check_pushes_suport(github_org: str, ref: str) -> bool:
     if not github_org:
@@ -133,8 +135,14 @@ def get_artifact_version(github_org: str, github_branch: str):
     except InvalidGitRepositoryError:
         raise Exception("The specified path is not a git repository.")
 
-    commit = git_repo.head.commit
-    commit_subject = commit.message.splitlines()[0]
+    try:
+        commit = git_repo.head.commit
+        commit_subject = commit.message.splitlines()[0]
+    except Exception:
+        raise Exception("Unable to get commit message from a git repository.")
+    finally:
+        git_repo.close()
+
     print(f"Git commit message: {commit_subject}")
 
     pattern = r"^Merge pull request #[0-9]+ from " + re.escape(github_org) + r"/release/(v[0-9]+\.[0-9]+\.[0-9]+(?:-rc)?)$"
@@ -148,7 +156,6 @@ def get_artifact_version(github_org: str, github_branch: str):
             file=sys.stderr)
         return ""
 
-    git_repo.close()
     return regexp_match.group(1)
 
 def update_tenant(tenants: set, workflow_file: str, artifact_version: str, github_org:str, github_repository_name:str, github_token:str):
@@ -183,6 +190,7 @@ def update_tenant(tenants: set, workflow_file: str, artifact_version: str, githu
         try:
             gh_repo = gh.get_repo(tenant_repository)
         except GithubException as gh_err:
+            gh.close()
             if err.status == 401:
                 raise Exception(f"Error accessing GitHub repository {tenant_repository}.\n"+
                                 f"{err.message}")
@@ -205,6 +213,7 @@ def update_tenant(tenants: set, workflow_file: str, artifact_version: str, githu
             gh_repo._requester.requestJsonAndCheck("POST", url, input=payload)
             print(f"Updated {project_dependency} dependency in the {tenant_environment} branch of {tenant_name}{tenant_repository_sufix} repository to version {artifact_version}.")
         except GithubException as gh_err:
+            gh.close()
             raise Exception(f"Error triggering workflow for repository {tenant_name}{tenant_repository_sufix}: {gh_err}")
 
     gh.close()
