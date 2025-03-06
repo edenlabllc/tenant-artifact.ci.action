@@ -13,7 +13,7 @@ env:
 jobs:
   release-tenant-artifact-action:
     name: Checkout main and tenant-artifact action repositories, release action
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     steps:
       - name: Initialize environment variables
         run: |
