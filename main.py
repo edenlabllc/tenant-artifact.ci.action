@@ -13,13 +13,16 @@ from github import Github, Repository, GithubException
 from packaging import version
 from slack_sdk.webhook import WebhookClient
 
+
 def get_required_env(env_name: str) -> str:
     env_value = os.environ.get(env_name, '')
     if not env_value:
         raise Exception(f"{env_name} is not set or has an invalid format.")
     return env_value
 
-def notify_slack(slack_webhook: str, tenant_name: str, repository_name: str, tag_name: str, release_notes_path: str, details: str = ""):
+
+def notify_slack(slack_webhook: str, tenant_name: str, repository_name: str, tag_name: str, release_notes_path: str,
+                 details: str = ""):
     github_server_url = "https://github.com"
     repository_url = f"{github_server_url}/{repository_name}"
     release_ulr = f"{repository_url}/tree/{tag_name}|{tag_name}"
@@ -45,6 +48,7 @@ def notify_slack(slack_webhook: str, tenant_name: str, repository_name: str, tag
     if response.status_code != 200:
         raise Exception(f"Error sending message: {response.status_code}, {response.body}")
 
+
 def git_push_tag(artifact_version: str):
     try:
         git_repo = Repo(".")
@@ -57,42 +61,43 @@ def git_push_tag(artifact_version: str):
             with git_repo.config_writer() as cw:
                 cw.set_value("user", "name", "github-actions")
                 cw.set_value("user", "email", "github-actions@github.com")
-        except Exception as err:
-            raise Exception(f"Error while setting up Git user:\n{err}")
+        except Exception as git_err:
+            raise Exception(f"Error while setting up Git user:\n{git_err}")
 
         print(f"Add Git tag {artifact_version}.")
         try:
             git_repo.create_tag(artifact_version, message=f"Release {artifact_version}")
-        except GitCommandError as err:
-            raise Exception(f"Error creating tag {artifact_version}:\n{err}")
+        except GitCommandError as git_err:
+            raise Exception(f"Error creating tag {artifact_version}:\n{git_err}")
 
         try:
             origin = git_repo.remote(name="origin")
             origin.push(artifact_version)
             print(f"Tag {artifact_version} successfully sent to origin.")
-        except GitCommandError as err:
-            raise Exception(f"Error sending tag {artifact_version}:\n{err}")
+        except GitCommandError as git_err:
+            raise Exception(f"Error sending tag {artifact_version}:\n{git_err}")
 
-def github_push_release(artifact_version: str, github_sha: str, github_repository:str, github_token:str):
+
+def github_push_release(artifact_version: str, github_sha: str, github_repository: str, github_token: str):
     with Github(github_token) as gh:
         try:
             gh_repo = gh.get_repo(github_repository)
-        except GithubException as err:
-            if err.status == 401:
-                raise Exception(f"Error accessing GitHub repository.\n"+
-                                f"{err.message}")
-            elif err.status == 404:
-                raise Exception(f"Error accessing GitHub repository.\n"+
+        except GithubException as gh_err:
+            if gh_err.status == 401:
+                raise Exception(f"Error accessing GitHub repository.\n" +
+                                f"{gh_err.message}")
+            elif gh_err.status == 404:
+                raise Exception(f"Error accessing GitHub repository.\n" +
                                 f"Repository {github_repository} Not Found.")
             else:
-                raise Exception(f"Error accessing GitHub repository:\n{err}")
+                raise Exception(f"Error accessing GitHub repository:\n{gh_err}")
 
         try:
             gh_repo.get_release(artifact_version)
             print(f"GitHub release {artifact_version} already exists.")
             print("Skipped.")
-        except GithubException as err:
-            if err.status == 404:
+        except GithubException as gh_err:
+            if gh_err.status == 404:
                 print(f"Creating a GitHub release {artifact_version}.")
                 try:
                     release = gh_repo.create_git_release(
@@ -112,17 +117,20 @@ def github_push_release(artifact_version: str, github_sha: str, github_repositor
                 except GithubException as gh_err:
                     raise Exception(f"Error creating release on GitHub:\n{gh_err}")
             else:
-                raise Exception(f"Error checking for release existence:\n{err}")
+                raise Exception(f"Error checking for release existence:\n{gh_err}")
+
 
 def check_pushes_suport(github_org: str, ref: str) -> bool:
     if not github_org:
         print("GITHUB_REPOSITORY is not set or has an invalid format.", file=sys.stderr)
         return False
     elif not re.match(r"refs/heads/(staging|production)", ref):
-        print("Only pushes to staging and production branches are supported. Check the workflow's on.push.* section.", file=sys.stderr)
+        print("Only pushes to staging and production branches are supported. Check the workflow's on.push.* section.",
+              file=sys.stderr)
         return False
     else:
         return True
+
 
 def get_artifact_version(github_org: str, github_branch: str):
     try:
@@ -135,19 +143,22 @@ def get_artifact_version(github_org: str, github_branch: str):
         commit_subject = commit.message.splitlines()[0]
     print(f"Git commit message: {commit_subject}")
 
-    pattern = r"^Merge pull request #[0-9]+ from " + re.escape(github_org) + r"/release/(v[0-9]+\.[0-9]+\.[0-9]+(?:-rc)?)$"
+    pattern = r"^Merge pull request #[0-9]+ from " + re.escape(
+        github_org) + r"/release/(v[0-9]+\.[0-9]+\.[0-9]+(?:-rc)?)$"
     regexp_match = re.match(pattern, commit_subject)
     if not regexp_match:
         print(
-            f"Pushes to {github_branch} should be done via merges of PR requests from release/vN.N.N or release/vN.N.N-rc branches only.\n"+
-            f"The expected message format (will be used for parsing a release tag):\n"+
+            f"Pushes to {github_branch} should be done via merges of PR requests from release/vN.N.N or release/vN.N.N-rc branches only.\n" +
+            f"The expected message format (will be used for parsing a release tag):\n" +
             f"Merge pull request #N from {github_org}/release/vN.N.N or {github_org}/release/vN.N.N-rc",
             file=sys.stderr)
         return ""
 
     return regexp_match.group(1)
 
-def update_tenant(tenants: set, workflow_file: str, artifact_version: str, github_org:str, github_repository_name:str, github_token:str):
+
+def update_tenant(tenants: set, workflow_file: str, artifact_version: str, github_org: str, github_repository_name: str,
+                  github_token: str):
     if len(tenants) == 0:
         print("Skip tenant environments update.")
         return
@@ -160,8 +171,9 @@ def update_tenant(tenants: set, workflow_file: str, artifact_version: str, githu
     with Github(github_token) as gh:
         for tenant_and_environment in tenants:
             if len(tenant_and_environment.split("=")) != 2:
-                print(f"Item '{tenant_and_environment}' of the tenants and environments list is not in the correct format.\n"+
-                    "Example: 'tenant=env'\n"+
+                print(
+                    f"Item '{tenant_and_environment}' of the tenants and environments list is not in the correct format.\n" +
+                    "Example: 'tenant=env'\n" +
                     "Skip this list item.")
                 continue
 
@@ -169,7 +181,8 @@ def update_tenant(tenants: set, workflow_file: str, artifact_version: str, githu
             tenant_environment = str(tenant_and_environment.split("=")[1]).strip()
 
             if not (tenant_name and tenant_environment):
-                print(f"Item '{tenant_and_environment}' of the tenants and environments list is not in the correct format.\n"+
+                print(
+                    f"Item '{tenant_and_environment}' of the tenants and environments list is not in the correct format.\n" +
                     "Skip this list item.")
                 continue
 
@@ -178,11 +191,11 @@ def update_tenant(tenants: set, workflow_file: str, artifact_version: str, githu
             try:
                 gh_repo = gh.get_repo(tenant_repository)
             except GithubException as gh_err:
-                if err.status == 401:
-                    raise Exception(f"Error accessing GitHub repository {tenant_repository}.\n"+
-                                    f"{err.message}")
-                elif err.status == 404:
-                    raise Exception(f"Error accessing GitHub repository {tenant_repository}.\n"+
+                if gh_err.status == 401:
+                    raise Exception(f"Error accessing GitHub repository {tenant_repository}.\n" +
+                                    f"{gh_err.message}")
+                elif gh_err.status == 404:
+                    raise Exception(f"Error accessing GitHub repository {tenant_repository}.\n" +
                                     f"Repository {github_org}/{github_repository_name} Not Found.")
                 else:
                     raise Exception(f"Error accessing repository {tenant_repository}:\n{gh_err}")
@@ -198,9 +211,12 @@ def update_tenant(tenants: set, workflow_file: str, artifact_version: str, githu
             url = f"/repos/{tenant_repository}/actions/workflows/{workflow_file}/dispatches"
             try:
                 gh_repo._requester.requestJsonAndCheck("POST", url, input=payload)
-                print(f"Updated {project_dependency} dependency in the {tenant_environment} branch of {tenant_name}{tenant_repository_sufix} repository to version {artifact_version}.")
+                print(
+                    f"Updated {project_dependency} dependency in the {tenant_environment} branch of {tenant_name}{tenant_repository_sufix} repository to version {artifact_version}.")
             except GithubException as gh_err:
-                raise Exception(f"Error triggering workflow for repository {tenant_name}{tenant_repository_sufix}:\n{gh_err}")
+                raise Exception(
+                    f"Error triggering workflow for repository {tenant_name}{tenant_repository_sufix}:\n{gh_err}")
+
 
 def rmk_install(input_rmk_version: str):
     print("Install RMK.")
@@ -208,8 +224,8 @@ def rmk_install(input_rmk_version: str):
     try:
         response = requests.get("https://edenlabllc-rmk.s3.eu-north-1.amazonaws.com/rmk/s3-installer")
         response.raise_for_status()
-    except requests.RequestException as err:
-        raise Exception(f"Error downloading RMK installer file:\n{err}")
+    except requests.RequestException as req_err:
+        raise Exception(f"Error downloading RMK installer file:\n{req_err}")
 
     script_content = response.text
 
@@ -219,15 +235,15 @@ def rmk_install(input_rmk_version: str):
             check=True,
             text=True,
             input=script_content)
-    except subprocess.CalledProcessError as err:
-        raise Exception(f"Error instaling RMK:\n{err}")
+    except subprocess.CalledProcessError as pr_err:
+        raise Exception(f"Error instaling RMK:\n{pr_err}")
 
     try:
         rmk_version_output = subprocess.check_output(["rmk", "--version"], encoding='UTF-8').strip()
         reg_match = re.search(r'^.*\s(.*)$', rmk_version_output)
         rmk_version = reg_match.group(1) if reg_match else rmk_version_output
-    except subprocess.CalledProcessError as err:
-        raise Exception(f"Error getting RMK version:\n{err}")
+    except subprocess.CalledProcessError as pr_err:
+        raise Exception(f"Error getting RMK version:\n{pr_err}")
 
     print(f"RMK version {rmk_version}")
 
@@ -236,8 +252,9 @@ def rmk_install(input_rmk_version: str):
             ["rmk", "config", "init", "--progress-bar=false"],
             check=True,
             text=True)
-    except subprocess.CalledProcessError as err:
-        raise Exception(f"Error getting RMK config init:\n{err}")
+    except subprocess.CalledProcessError as pr_err:
+        raise Exception(f"Error getting RMK config init:\n{pr_err}")
+
 
 def get_parser_namespace() -> Namespace:
     class EnvDefault(argparse.Action):
@@ -252,7 +269,7 @@ def get_parser_namespace() -> Namespace:
         def __call__(self, parser, namespace, values, option_string=None):
             setattr(namespace, self.dest, values)
 
-    parser=argparse.ArgumentParser()
+    parser = argparse.ArgumentParser()
 
     parser.add_argument(
         "--update_tenant_environments", action=EnvDefault, required=False,
@@ -316,9 +333,10 @@ def get_parser_namespace() -> Namespace:
 
     return parser.parse_args()
 
+
 if __name__ == "__main__":
     try:
-        args=get_parser_namespace()
+        args = get_parser_namespace()
 
         rmk_github_token = args.github_token
         update_tenant_environments = set(args.update_tenant_environments.splitlines())
@@ -344,8 +362,8 @@ if __name__ == "__main__":
         print(f"Tenant: {tenant_name}")
 
         if input_rmk_version != "latest":
-            if version.parse('v0.45.0-rc')>version.parse(input_rmk_version):
-                raise Exception(f"Version {input_rmk_version} of RMK is not correct.\n"+
+            if version.parse('v0.45.0-rc') > version.parse(input_rmk_version):
+                raise Exception(f"Version {input_rmk_version} of RMK is not correct.\n" +
                                 "The version for RMK must be at least v0.45.0.")
 
         os.environ['GITHUB_TOKEN'] = rmk_github_token
@@ -366,12 +384,14 @@ if __name__ == "__main__":
         rmk_install(input_rmk_version)
 
         if github_branch == "production":
-            update_tenant(update_tenant_environments, update_tenant_workflow_file, artifact_version, github_org, github_repository_name, rmk_github_token)
+            update_tenant(update_tenant_environments, update_tenant_workflow_file, artifact_version, github_org,
+                          github_repository_name, rmk_github_token)
         else:
             print("Skip tenant environments update.")
 
-        if slack_notifications:
-            notify_slack(slack_webhook, tenant_name, github_repository, artifact_version, slack_message_release_notes_path, slack_message_details)
+        if slack_notifications == "true":
+            notify_slack(slack_webhook, tenant_name, github_repository, artifact_version,
+                         slack_message_release_notes_path, slack_message_details)
 
     except Exception as err:
         print(f"Error: {err}", file=sys.stderr)
