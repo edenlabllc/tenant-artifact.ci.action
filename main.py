@@ -11,6 +11,7 @@ from argparse import Namespace
 from git import Repo, InvalidGitRepositoryError, GitCommandError
 from github import Github, Repository, GithubException
 from packaging import version
+from str2bool import str2bool
 from slack_sdk.webhook import WebhookClient
 
 
@@ -283,17 +284,17 @@ def get_parser_namespace() -> Namespace:
 
     parser.add_argument(
         "--autotag", action=EnvDefault, required=False,
-        envvar="INPUT_AUTOTAG", type=bool, default=False,
+        envvar="INPUT_AUTOTAG", type=str, default='',
         help="Enable auto tagging when merging into target branch.")
 
     parser.add_argument(
         "--push_tag", action=EnvDefault, required=False,
-        envvar="INPUT_PUSH_TAG", type=bool, default=False,
+        envvar="INPUT_PUSH_TAG", type=str, default='',
         help="Custom tenant name for different client repo.")
 
     parser.add_argument(
         "--slack_notifications", action=EnvDefault, required=False,
-        envvar="INPUT_SLACK_NOTIFICATIONS", type=bool, default=False,
+        envvar="INPUT_SLACK_NOTIFICATIONS", type=str, default='',
         help="Enable Slack notifications.")
 
     parser.add_argument(
@@ -341,9 +342,9 @@ if __name__ == "__main__":
         rmk_github_token = args.github_token
         update_tenant_environments = set(args.update_tenant_environments.splitlines())
         update_tenant_workflow_file = args.update_tenant_workflow_file
-        autotag = args.autotag
-        push_tag = args.push_tag
-        slack_notifications = args.slack_notifications
+        autotag = bool(str2bool(args.autotag))
+        push_tag = bool(str2bool(args.push_tag))
+        slack_notifications = bool(str2bool(args.slack_notifications))
         slack_webhook = args.slack_webhook
         slack_message_release_notes_path = args.slack_message_release_notes_path
         slack_message_details = args.slack_message_details
@@ -389,7 +390,7 @@ if __name__ == "__main__":
         else:
             print("Skip tenant environments update.")
 
-        if slack_notifications == "true":
+        if slack_notifications:
             notify_slack(slack_webhook, tenant_name, github_repository, artifact_version,
                          slack_message_release_notes_path, slack_message_details)
 
