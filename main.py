@@ -204,8 +204,8 @@ def update_tenant(tenants: set, workflow_file: str, artifact_version: str, githu
             payload = {
                 "ref": tenant_environment,
                 "inputs": {
-                    "project_dependency_name": project_dependency,
-                    "project_dependency_version": artifact_version,
+                    "rmk_project_dependency_name": project_dependency,
+                    "rmk_project_dependency_version": artifact_version,
                 }
             }
 
