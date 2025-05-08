@@ -1,5 +1,9 @@
 # Tenant Artifact CI Action
 
+[![Release](https://img.shields.io/github/v/release/edenlabllc/tenant.artifact.ci.action.svg?style=for-the-badge)](https://github.com/edenlabllc/tenant.artifact.ci.action/releases/latest)
+[![Software License](https://img.shields.io/github/license/edenlabllc/tenant.artifact.ci.action.svg?style=for-the-badge)](LICENSE)
+[![Powered By: Edenlab](https://img.shields.io/badge/powered%20by-edenlab-8A2BE2.svg?style=for-the-badge)](https://edenlab.io)
+
 Reusable GitHub Action for auto-tagging, releasing artifacts, and updating dependencies in tenant bootstrap repositories.
 
 ## What it does
@@ -95,6 +99,6 @@ with:
 
 ## Internals
 
-- [`action.yml`](./action.yml) — defines action inputs
-- [`main.py`](./main.py) — executes logic
+- [`action.yml`](./action.yml) — defines action inputs  
+- [`main.py`](./main.py) — executes logic  
 - [`examples/`](./examples) — ready-to-use templates
