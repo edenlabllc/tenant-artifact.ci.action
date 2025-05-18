@@ -9,9 +9,6 @@ inputs:
     description: Enable auto tagging when merging into target branch.
     required: false
     default: false
-  custom_tenant_name:
-    description: Custom tenant name for different client repo.
-    required: false
   github_token_repo_full_access:
     description: GitHub token with full access permissions to repositories.
     required: true
@@ -20,10 +17,6 @@ inputs:
     description: Manual push a tag from the current branch.
     required: false
     default: false
-  rmk_version:
-    description: RMK version.
-    required: false
-    default: latest
   slack_notifications:
     description: Enable Slack notifications.
     required: false
@@ -77,10 +70,8 @@ runs:
       env:
         INPUT_ARTIFACT_VERSION: ${{ inputs.artifact_version }}
         INPUT_AUTOTAG: ${{ inputs.autotag }}
-        INPUT_CUSTOM_TENANT_NAME: ${{ inputs.custom_tenant_name }}
         INPUT_GITHUB_TOKEN_REPO_FULL_ACCESS: ${{ inputs.github_token_repo_full_access }}
         INPUT_PUSH_TAG: ${{ inputs.push_tag }}
-        INPUT_RMK_VERSION: ${{ inputs.rmk_version }}
         INPUT_SLACK_NOTIFICATIONS: ${{ inputs.slack_notifications }}
         INPUT_SLACK_WEBHOOK: ${{ inputs.slack_webhook }}
         INPUT_SLACK_MESSAGE_RELEASE_NOTES_PATH: ${{ inputs.slack_message_release_notes_path }}
