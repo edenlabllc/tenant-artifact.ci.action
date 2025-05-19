@@ -14,6 +14,10 @@ class TenantArtifactCIArgumentParser(ArgumentParser):
                                  action=self.EnvDefault, envvar="INPUT_GITHUB_TOKEN_REPO_FULL_ACCESS",
                                  type=str, required=False)
 
+        self.parser.add_argument("--major-version-branch",
+                                 action=self.EnvDefault, envvar="INPUT_MAJOR_VERSION_BRANCH",
+                                 type=str, required=False)
+
         self.parser.add_argument("--push_tag",
                                  action=self.EnvDefault, envvar="INPUT_PUSH_TAG",
                                  type=str, required=False)

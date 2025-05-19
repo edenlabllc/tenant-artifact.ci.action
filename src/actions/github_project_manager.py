@@ -21,10 +21,30 @@ class GitHubProjectManager:
             "refs/heads/") else None
         self.github_sha = github_context.sha
         self.repo = Repo(".")
+        self.version_prev = None
         self.version = None
-        self.VERSION_REGEX = r"(v\d+\.\d+\.\d+(?:-rc)?)$"
+        # self.VERSION_REGEX = r"(v\d+\.\d+\.\d+(?:-rc)?)$"
+
+        if self.git_branch == (self.args.major_version_branch or "").strip():
+            self.VERSION_REGEX = fr"v\d+\.\d+\.\d+-{self.args.major_version_branch}"
+        else:
+            self.VERSION_REGEX = r"v\d+\.\d+\.\d+(?:-rc)?"
+
+        ''' Validate major version branch format if provided '''
+        if (self.args.major_version_branch or "").strip():
+            if not re.match(r"^[a-zA-Z0-9_-]+-v\d+$", self.args.major_version_branch):
+                raise ValueError(
+                    f"invalid major_version_branch format: '{self.args.major_version_branch}'. "
+                    f"Expected format is '<name>-v<major>'."
+                )
 
     def run(self):
+        self.version_prev = self._get_latest_valid_version_tag()
+
+        if not self.version_prev:
+            raise ValueError("at least one version is required in the repository. "
+                             "Tag a Git commit of the master branch manually before running the workflow.")
+
         if not self.git_branch:
             raise ValueError("only pushes to branches are supported. Check the workflow's on.push.* section.")
 
@@ -34,6 +54,11 @@ class GitHubProjectManager:
         """
         Creates a Git tag and GitHub release for the current version.
         """
+        print("Release service (only for staging, production or major version branch).")
+
+        if self.git_branch not in ["staging", "production", self.args.major_version_branch]:
+            print("Skipped: neither on staging, production nor major version branch.")
+            return
 
         release_msg = f"Release {self.version}"
 
@@ -49,7 +74,8 @@ class GitHubProjectManager:
         except GitCommandError as err:
             if "already exists" in str(err):
                 print(f"Tag {self.version} already exists. Skipping tag creation.")
-            raise RuntimeError(f"failed to create or push Git tag: {err}")
+            else:
+                raise RuntimeError(f"failed to create or push Git tag: {err}")
 
         # Check and create GitHub release
         try:
@@ -78,6 +104,11 @@ class GitHubProjectManager:
 
         self._handle_notify_slack()
 
+    def _get_latest_valid_version_tag(self):
+        tags = sorted(self.repo.tags, key=lambda t: t.commit.committed_date)
+        valid_tags = [tag.name for tag in tags if re.fullmatch(self.VERSION_REGEX, tag.name)]
+        return valid_tags[-1] if valid_tags else None
+
     def _handle_master_branch(self):
         if self.args.artifact_version:
             self.version = self.args.artifact_version
@@ -90,17 +121,36 @@ class GitHubProjectManager:
         print(first_line)
 
         # Compose a full pattern to match PR merge commit messages
-        pattern = rf"^Merge pull request #[0-9]+ from {re.escape(self.github_context.repository_owner)}/release/({self.VERSION_REGEX})$"
+        pattern = rf"^Merge pull request #[0-9]+ from {re.escape(self.github_context.repository_owner)}/(release|hotfix)/({self.VERSION_REGEX})$"
         match = re.match(pattern, first_line)
 
         # If the commit message doesn't match an expected format — raise a clear error
         if not match:
             err_message = (f"Invalid commit message for branch '{self.git_branch}'.\n"
                            f"Expected formats:\n"
-                           f"- release/vX.Y.Z|vX.Y.Z-rc")
-            raise ValueError(err_message)
+                           f"- release|hotfix/vX.Y.Z|vX.Y.Z-rc")
+            if (self.args.major_version_branch or "").strip():
+                raise ValueError(err_message +
+                                 f"\n- {self.args.major_version_branch}: release|hotfix/vX.Y.Z-{self.args.major_version_branch}"
+                                 )
+            else:
+                raise ValueError(err_message)
 
         self.version = match.group(2)
+
+        print("Check GitHub release does not exist.")
+        if self._github_release_exists(self.version):
+            raise ValueError(f"GitHub release {self.version} already exists. "
+                             f"Increase the version following SemVer and create a new release.")
+
+    def _github_release_exists(self, version: str) -> bool:
+        try:
+            self.gh_repo.get_release(version)
+            return True
+        except GithubException as err:
+            if err.status == 404:
+                return False
+            raise ValueError(f"checking release existence: {err}")
 
     def _handle_notify_slack(self):
         github_server_url = "https://github.com"

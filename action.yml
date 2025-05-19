@@ -13,6 +13,14 @@ inputs:
     description: GitHub token with full access permissions to repositories.
     required: true
     default: ""
+  major_version_branch:
+    description: |
+      Name of the base branch for publishing hotfixes to a specific major version line.
+      Use this if you need to release a hotfix for an older major version, instead of the default branch (e.g., master).
+      Example:
+        projectname-v4
+    required: false
+    default: ""
   push_tag:
     description: Manual push a tag from the current branch.
     required: false
@@ -71,6 +79,7 @@ runs:
         INPUT_ARTIFACT_VERSION: ${{ inputs.artifact_version }}
         INPUT_AUTOTAG: ${{ inputs.autotag }}
         INPUT_GITHUB_TOKEN_REPO_FULL_ACCESS: ${{ inputs.github_token_repo_full_access }}
+        INPUT_MAJOR_VERSION_BRANCH: ${{ inputs.major_version_branch }}
         INPUT_PUSH_TAG: ${{ inputs.push_tag }}
         INPUT_SLACK_NOTIFICATIONS: ${{ inputs.slack_notifications }}
         INPUT_SLACK_WEBHOOK: ${{ inputs.slack_webhook }}
