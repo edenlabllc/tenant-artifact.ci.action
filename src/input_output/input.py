@@ -41,4 +41,3 @@ class TenantArtifactCIArgumentParser(ArgumentParser):
         self.parser.add_argument("--update_tenant_workflow_file",
                                  action=self.EnvDefault, envvar="INPUT_UPDATE_TENANT_WORKFLOW_FILE",
                                  type=str, required=False)
-

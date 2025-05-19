@@ -136,6 +136,7 @@ class ProjectUpdateTenants:
         self.github_context = github_context
         self.github = Github(args.github_token)
         self.version = version
+        self.project = github_context.get_repository_name()
         self.workflow_file = args.update_tenant_workflow_file if args.update_tenant_workflow_file else "project-update.yaml"
         self.tenant_environments = set(args.update_tenant_environments.splitlines())
 
@@ -158,19 +159,20 @@ class ProjectUpdateTenants:
         print(f"Repository: {tenant_repo_name}")
         print(f"Environment: {environment}")
         print(f"Workflow: {self.workflow_file}")
+        print(f"Project: {self.project}")
         print(f"Version: {self.version}")
 
         payload = {
             "ref": environment,
             "inputs": {
-                "rmk_project_dependency_name": self.ecr_repository_full_name,
+                "rmk_project_dependency_name": self.project,
                 "rmk_project_dependency_version": self.version
             }
         }
 
         try:
             gh_repo = self.github.get_repo(tenant_repo_name)
-            url = f"/repos/{tenant_repo_name}/actions/workflows/{self.WORKFLOW_FILE}/dispatches"
+            url = f"/repos/{tenant_repo_name}/actions/workflows/{self.workflow_file}/dispatches"
             # PyGithub doesn't expose workflow_dispatch, so we use internal requester:
             gh_repo._requester.requestJsonAndCheck("POST", url, input=payload)
             print(f"Workflow dispatched for tenant '{tenant}'")
