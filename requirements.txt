@@ -1,7 +1,7 @@
-Jinja2~=3.1.2
 requests~=2.32.3
 GitPython~=3.1.44
-PyGithub~=2.5.0
+PyGithub==2.5.0
 slack_sdk~=3.34.0
 packaging~=24.2
-str2bool~=1.1
+
+git+https://github.com/edenlabllc/github_actions.common.git@v1#egg=github_actions.common

@@ -18,7 +18,6 @@ It supports SemVer-based artifact versioning, RMK integration, Slack notificatio
 - Attach `project.yaml` to the release (if exists)
 - Trigger `workflow_dispatch` in tenant bootstrap repos with updated versions
 - Optional Slack notifications with release context
-- RMK version check and installation
 - GitHub-native, lightweight, and composable
 
 ## When to use
@@ -55,7 +54,6 @@ jobs:
           github_token_repo_full_access: ${{ secrets.GH_TOKEN_REPO_FULL_ACCESS }}
           autotag: true
           push_tag: true
-          rmk_version: v0.45.0
           update_tenant_environments: |
             kodjin=staging
             kodjin=production
