@@ -23,12 +23,11 @@ class GitHubProjectManager:
         self.repo = Repo(".")
         self.version_prev = None
         self.version = None
-        # self.VERSION_REGEX = r"(v\d+\.\d+\.\d+(?:-rc)?)$"
 
         if self.git_branch == (self.args.major_version_branch or "").strip():
-            self.VERSION_REGEX = fr"v\d+\.\d+\.\d+-{self.args.major_version_branch}"
+            self.VERSION_REGEX = fr"v\d+\.\d+\.\d+-{self.args.major_version_branch}$"
         else:
-            self.VERSION_REGEX = r"v\d+\.\d+\.\d+(?:-rc)?"
+            self.VERSION_REGEX = r"v\d+\.\d+\.\d+(?:-rc)?$"
 
         ''' Validate major version branch format if provided '''
         if (self.args.major_version_branch or "").strip():
