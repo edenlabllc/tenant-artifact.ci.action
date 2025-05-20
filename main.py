@@ -21,11 +21,10 @@ if __name__ == "__main__":
         print(f"Artifact_version: {project_manager.version}")
 
         """Create Tag and Release"""
-        if args.autotag or args.push_tag:
-            project_manager.create_git_tag_and_release()
+        project_manager.create_git_tag_and_release()
 
         """Update Artifact version in Tenants"""
-        if github_context.ref_name == "production":
+        if (github_context.ref_name == "production") or (args.artifact_version or "").strip():
             project_update_tenants = ProjectUpdateTenants(args, github_context, project_manager.version)
             project_update_tenants.run()
         else:
