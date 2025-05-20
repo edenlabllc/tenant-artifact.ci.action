@@ -54,7 +54,6 @@ jobs:
           github_token_repo_full_access: ${{ secrets.GH_TOKEN_REPO_FULL_ACCESS }}
           autotag: true
           push_tag: true
-          rmk_version: v0.45.0
           update_tenant_environments: |
             kodjin=staging
             kodjin=production
