@@ -18,7 +18,6 @@ It supports SemVer-based artifact versioning, RMK integration, Slack notificatio
 - Attach `project.yaml` to the release (if exists)
 - Trigger `workflow_dispatch` in tenant bootstrap repos with updated versions
 - Optional Slack notifications with release context
-- RMK version check and installation
 - GitHub-native, lightweight, and composable
 
 ## When to use
