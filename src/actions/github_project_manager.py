@@ -53,9 +53,12 @@ class GitHubProjectManager:
         """
         Creates a Git tag and GitHub release for the current version.
         """
-        print("Release service (only for staging, production or major version branch).")
+        if (self.args.artifact_version or "").strip():
+            print(f"Release service for {self.github_context.ref_name} branch.")
+        else:
+            print("Release service (only for staging, production or major version branch).")
 
-        if self.git_branch not in ["staging", "production", self.args.major_version_branch]:
+        if not ((self.git_branch in ["staging", "production", self.args.major_version_branch]) or (self.args.artifact_version or "").strip()):
             print("Skipped: neither on staging, production nor major version branch.")
             return
 
@@ -66,9 +69,12 @@ class GitHubProjectManager:
             self.repo.git.config("user.name", "github-actions")
             self.repo.git.config("user.email", "github-actions@github.com")
 
-            print(f"Add Git tag {self.version}")
-            self.repo.create_tag(self.version, message=release_msg)
-            self.repo.remotes.origin.push(self.version, force=True)
+            if self.args.autotag or self.args.push_tag:
+                print(f"Add Git tag {self.version}")
+                self.repo.create_tag(self.version, message=release_msg)
+                self.repo.remotes.origin.push(self.version, force=True)
+            else:
+                print("Skip add Git tag")
 
         except GitCommandError as err:
             if "already exists" in str(err):
