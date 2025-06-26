@@ -107,7 +107,7 @@ class GitHubProjectManager:
             else:
                 raise RuntimeError(f"failed to check or create GitHub release: {err}")
 
-        if self.args.slack_notifications:
+        if (self.args.slack_notifications or "").strip() == "true":
             self._handle_notify_slack()
 
     def _get_latest_valid_version_tag(self):
