@@ -1,0 +1,43 @@
+name: Prepare tenant Artifact manual
+
+on:
+  workflow_dispatch:
+    inputs:
+      artifact_version:
+        description: Tenant release version.
+        required: true
+      manual_push_tag:
+        description: Manually push a tag from the current branch.
+        required: false
+        type: boolean
+      # release_slack_message_details:
+      #   description: Additional information added to the body of the Slack message.
+      #   required: false
+      #   default: ""
+      update_tenant_environments:
+        description: List of tenants and environments for automatically updating the dependency version.
+        required: false
+        default: ""
+
+jobs:
+  tenant-artifact:
+    name: Checkout main repositories, create and upload tenant Artifact
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout main repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+
+      - name: Create and upload tenant Artifact
+        uses: edenlabllc/tenant-artifact.ci.action@v3
+        with:
+          artifact_version: ${{ github.event.inputs.artifact_version }}
+          github_token_repo_full_access: ${{ secrets.GH_TOKEN_REPO_FULL_ACCESS }}
+          push_tag: ${{ github.event.inputs.manual_push_tag }}
+          # slack_message_release_notes_path: docs/release-notes.md
+          # slack_message_details: ${{ github.event.inputs.release_slack_message_details }}
+          # slack_notifications: false # (by default)
+          # slack_webhook: ${{ secrets.SLACK_WEBHOOK_RELEASES }}
+          update_tenant_environments: ${{ github.event.inputs.update_tenant_environments }}
