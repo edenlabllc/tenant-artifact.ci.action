@@ -24,7 +24,7 @@ jobs:
           fetch-depth: 0
 
       - name: Create and upload tenant Artifact
-        uses: edenlabllc/tenant-artifact.ci.action@v3
+        uses: edenlabllc/tenant-artifact.ci.action@v4
         with:
           autotag: true
           github_token_repo_full_access: ${{ secrets.GH_TOKEN_REPO_FULL_ACCESS }}

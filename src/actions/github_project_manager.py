@@ -27,7 +27,7 @@ class GitHubProjectManager:
         if self.git_branch == (self.args.major_version_branch or "").strip():
             self.VERSION_REGEX = fr"v\d+\.\d+\.\d+-{self.args.major_version_branch}$"
         else:
-            self.VERSION_REGEX = r"v\d+\.\d+\.\d+(?:-rc)?$"
+            self.VERSION_REGEX = r"v\d+\.\d+\.\d+(?:-rc(?:\.\d+)?)?$"
 
         ''' Validate major version branch format if provided '''
         if (self.args.major_version_branch or "").strip():
@@ -134,7 +134,7 @@ class GitHubProjectManager:
         if not match:
             err_message = (f"Invalid commit message for branch '{self.git_branch}'.\n"
                            f"Expected formats:\n"
-                           f"- release|hotfix/vX.Y.Z|vX.Y.Z-rc")
+                           f"- release|hotfix/vX.Y.Z|vX.Y.Z-rc|vX.Y.Z-rc.N")
             if (self.args.major_version_branch or "").strip():
                 raise ValueError(err_message +
                                  f"\n- {self.args.major_version_branch}: release|hotfix/vX.Y.Z-{self.args.major_version_branch}"
