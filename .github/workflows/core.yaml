@@ -8,7 +8,7 @@ on:
 
 env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  VERSION: v4
+  VERSION: v3
 
 jobs:
   release-tenant-artifact-action:
