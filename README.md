@@ -49,7 +49,7 @@ jobs:
           fetch-depth: 0
 
       - name: Run Tenant Artifact CI Action
-        uses: edenlabllc/tenant.artifact.ci.action@v1
+        uses: edenlabllc/tenant.artifact.ci.action@v3
         with:
           github_token_repo_full_access: ${{ secrets.GH_TOKEN_REPO_FULL_ACCESS }}
           autotag: true
